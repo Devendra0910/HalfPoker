@@ -1,4 +1,4 @@
-"""HalfPoker engine.
+"""PowerPoker engine.
 
 Player 1 ("P1"): starts with 200 chips, 2 fully hidden hole cards.
 Player 2 ("P2"): starts with 300 chips, 2 hole cards but one of them is

@@ -1,4 +1,4 @@
-"""Run HalfPoker self-play simulations with identical-skill heuristic bots
+"""Run PowerPoker self-play simulations with identical-skill heuristic bots
 in both seats, to check whether the 200/hidden-hidden vs 300/hidden-exposed
 asymmetry is balanced.
 
