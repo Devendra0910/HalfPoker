@@ -1,0 +1,1090 @@
+<title>HalfPoker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap">
+<style>
+  :root{
+    --felt-1:#0a2e22;
+    --felt-2:#12513a;
+    --felt-3:#1f7a54;
+    --rail:#2c1810;
+    --rail-hi:#4a2c18;
+    --surface:#12241c;
+    --surface-2:#0c1c15;
+    --ink:#f4ecd8;
+    --ink-dim:#9fb8a9;
+    --line:rgba(230,190,110,.22);
+    --gold:#e8b64a;
+    --gold-deep:#a97a24;
+    --red:#c53a3a;
+    --card-face:#f8f0dd;
+    --card-ink:#221a10;
+    --card-red:#a82a2e;
+    --shadow: 0 3px 10px rgba(0,0,0,.35);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(31,122,84,.25), transparent 60%),
+      var(--felt-1);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  h1,h2,h3{ font-family:"Playfair Display",Georgia,serif; text-wrap:balance; margin:0; }
+  .mono{ font-family:"IBM Plex Mono","SFMono-Regular",Menlo,monospace; font-variant-numeric:tabular-nums; }
+  button{ font-family:inherit; }
+  ::selection{ background:var(--gold); color:var(--rail); }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001ms !important; transition-duration:.001ms !important; }
+  }
+
+  /* poker-chip token, reused for stack icons + bet presets */
+  .chip-ico{
+    display:inline-block; width:18px; height:18px; border-radius:50%; flex-shrink:0;
+    background:var(--chipc,var(--gold)); border:3px dashed rgba(255,255,255,.55);
+    box-shadow:0 1px 2px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.25);
+  }
+
+  .page{
+    max-width:1000px;
+    margin:0 auto;
+    padding:22px 18px 72px;
+  }
+
+  /* ---------- header ---------- */
+  .masthead{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap;
+    padding-bottom:16px; margin-bottom:18px;
+    border-bottom:2px solid var(--line);
+  }
+  .wordmark{ display:flex; align-items:center; gap:12px; }
+  .wordmark h1{
+    font-size:1.9rem; font-weight:800; letter-spacing:-0.01em; color:var(--gold);
+    text-shadow:0 2px 8px rgba(0,0,0,.4);
+  }
+  .wordmark .tag{
+    font-size:.66rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--felt-1);
+    padding:4px 10px; background:var(--gold); border-radius:20px;
+  }
+  .wordmark .tag.rating-tag{ background:transparent; border:1px solid var(--gold); color:var(--gold); }
+  .headbtns{ display:flex; gap:8px; }
+  .chip-btn{
+    background:var(--surface); border:1px solid var(--line); color:var(--ink-dim);
+    padding:8px 15px; border-radius:20px; font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    cursor:pointer; transition:border-color .15s, color .15s, background .15s;
+  }
+  .chip-btn:hover{ border-color:var(--gold); color:var(--gold); }
+  .chip-btn:focus-visible, .action-btn:focus-visible, .preset-chip:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .chip-btn.armed{ border-color:var(--red); color:#fff; background:var(--red); }
+
+  .rules-panel{
+    display:none; background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; margin-bottom:18px; font-size:.86rem; line-height:1.6; color:var(--ink-dim);
+    box-shadow:var(--shadow);
+  }
+  .rules-panel.open{ display:block; }
+  .rules-panel b{ color:var(--gold); }
+  .rules-panel ul{ margin:10px 0 0; padding-left:1.1em; }
+  .rules-panel li{ margin-bottom:4px; }
+
+  /* ---------- street steps ---------- */
+  .streets{ display:flex; gap:4px; margin-bottom:16px; background:var(--rail); border-radius:10px; padding:5px; box-shadow:var(--shadow); }
+  .streets .step{
+    flex:1; text-align:center; font-size:.68rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+    color:rgba(244,236,216,.45); padding:9px 4px; border-radius:7px;
+  }
+  .streets .step.active{ color:var(--rail); background:var(--gold); box-shadow:0 2px 6px rgba(0,0,0,.3); }
+  .streets .step.done{ color:var(--ink); }
+
+  /* ---------- table layout ---------- */
+  .layout{ display:grid; grid-template-columns:1fr 300px; gap:16px; align-items:start; }
+  @media (max-width:760px){ .layout{ grid-template-columns:1fr; } }
+
+  .table{
+    display:flex; flex-direction:column; gap:14px;
+    background:
+      radial-gradient(ellipse 500px 260px at 50% 20%, var(--felt-3), var(--felt-2) 65%, var(--felt-1) 100%);
+    border:10px solid var(--rail);
+    border-image: linear-gradient(155deg, var(--rail-hi), var(--rail) 40%, var(--rail) 60%, #1b0e08) 1;
+    border-radius:22px;
+    padding:18px;
+    box-shadow: inset 0 2px 18px rgba(0,0,0,.45), 0 10px 30px rgba(0,0,0,.4);
+  }
+
+  .strip{
+    background:rgba(10,20,15,.55); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; backdrop-filter:blur(2px);
+  }
+  .strip-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .strip-who{ display:flex; align-items:center; gap:8px; }
+  .strip-who .dot{ width:7px; height:7px; border-radius:50%; background:var(--gold); display:none; }
+  .strip-who .dot.on{ display:inline-block; box-shadow:0 0 0 4px rgba(232,182,74,.28); }
+  .strip-name{ font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); }
+  .stack-display{ display:flex; align-items:center; gap:7px; }
+  .strip-stack{ font-size:1.2rem; font-weight:700; color:var(--gold); }
+  .strip-cards{ display:flex; gap:10px; align-items:flex-start; }
+  .made-hand{
+    margin-top:10px; font-size:.74rem; font-weight:600; color:var(--gold);
+    letter-spacing:.02em; min-height:1em;
+  }
+  .made-hand .fyi{ color:var(--ink-dim); font-weight:500; font-style:italic; }
+
+  .card{
+    width:58px; height:81px; border-radius:7px; border:1px solid rgba(0,0,0,.15);
+    background:var(--card-face); display:flex; flex-direction:column; justify-content:space-between;
+    padding:6px 7px; position:relative; flex-shrink:0;
+    box-shadow:0 3px 6px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.5) inset;
+    transition:transform .3s, opacity .3s;
+  }
+  .card.black{ color:var(--card-ink); }
+  .card.red{ color:var(--card-red); }
+  .card-rank{ font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:1.02rem; line-height:1; }
+  .card-suit{ font-size:1.3rem; line-height:1; align-self:flex-end; }
+  .card.empty{ background:rgba(0,0,0,.12); border:1px dashed rgba(244,236,216,.3); opacity:.7; box-shadow:none; }
+  .card.redacted{
+    background:
+      repeating-linear-gradient(45deg, var(--red) 0 6px, #8f2727 6px 12px),
+      repeating-linear-gradient(-45deg, transparent 0 6px, rgba(0,0,0,.12) 6px 12px);
+    border:2px solid var(--gold);
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .redacted-label{ font-size:1.5rem; color:var(--gold); text-shadow:0 1px 2px rgba(0,0,0,.5); }
+  .card-wrap{ position:relative; }
+  .stamp{
+    position:absolute; top:-10px; left:50%; transform:translateX(-50%);
+    font-family:"IBM Plex Mono",monospace; font-size:.56rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--rail); background:var(--gold); border-radius:20px; padding:2px 7px;
+    white-space:nowrap; z-index:2; box-shadow:0 2px 4px rgba(0,0,0,.4);
+  }
+  .card.reveal-in{ animation:revealIn .45s ease-out; }
+  @keyframes revealIn{ from{ opacity:0; transform:scale(.8) rotateY(90deg); } to{ opacity:1; transform:scale(1) rotateY(0); } }
+
+  .board{
+    background:rgba(6,14,10,.35); border:1px solid var(--line); border-radius:12px;
+    padding:18px; text-align:center;
+  }
+  .pot-stack{ display:flex; justify-content:center; margin-bottom:2px; }
+  .pot-stack .chip-ico{ width:20px; height:20px; margin:0 -5px; }
+  .pot-stack .chip-ico:nth-child(1){ --chipc:#e6e6e6; transform:translateY(2px); }
+  .pot-stack .chip-ico:nth-child(2){ --chipc:var(--red); transform:translateY(-1px); }
+  .pot-stack .chip-ico:nth-child(3){ --chipc:#2f6fb0; transform:translateY(1px); }
+  .pot-label{ font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-dim); margin-top:6px; }
+  .pot-amount{ font-size:2.2rem; font-weight:700; color:var(--gold); margin:2px 0 12px; font-family:"IBM Plex Mono",monospace; text-shadow:0 2px 10px rgba(0,0,0,.4); }
+  .pot-split{
+    display:inline-flex; align-items:center; justify-content:center; gap:14px;
+    margin-bottom:16px; padding:8px 14px; background:rgba(0,0,0,.2); border-radius:20px;
+  }
+  .pot-split-side{ display:flex; align-items:center; gap:6px; }
+  .pot-split-side .chip-ico{ width:15px; height:15px; border-width:2px; }
+  .pot-split-side.you .chip-ico{ --chipc:var(--gold); }
+  .pot-split-side.ai .chip-ico{ --chipc:#c9d3ce; }
+  .pot-split-side .mono{ font-weight:700; font-size:.88rem; color:var(--ink); }
+  .split-label{ font-size:.62rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-dim); }
+  .pot-split-divider{ width:1px; height:16px; background:var(--line); }
+  .board-cards{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+
+  /* ---------- action console ---------- */
+  .console{
+    background:rgba(10,20,15,.55); border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+    min-height:60px; display:flex; flex-direction:column; gap:10px;
+  }
+  .console-status{ font-size:.85rem; color:var(--ink-dim); display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .console-status .odds{ font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--gold); }
+  .console-buttons{ display:flex; gap:9px; flex-wrap:wrap; }
+  .action-btn{
+    border:1px solid var(--line); background:linear-gradient(180deg, #1a3327, #0f2419); color:var(--ink);
+    padding:11px 20px; border-radius:8px; font-size:.8rem; font-weight:700; letter-spacing:.02em;
+    cursor:pointer; text-transform:uppercase; transition:transform .08s, box-shadow .15s;
+    font-family:"IBM Plex Sans",sans-serif; box-shadow:0 2px 0 rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .action-btn:hover:not(:disabled){ box-shadow:0 2px 0 rgba(0,0,0,.3), 0 0 0 2px var(--line); }
+  .action-btn:active:not(:disabled){ transform:translateY(2px); box-shadow:none; }
+  .action-btn:disabled{ opacity:.4; cursor:default; }
+  .action-btn.primary{ background:linear-gradient(180deg, #f2cb6e, var(--gold-deep)); color:#2a1c04; border-color:var(--gold-deep); }
+  .action-btn.warn{ background:linear-gradient(180deg, #d95252, #8f2727); color:#fff; border-color:#8f2727; }
+
+  .raise-panel{ display:none; flex-direction:column; gap:12px; border-top:1px solid var(--line); padding-top:12px; }
+  .raise-panel.open{ display:flex; }
+  .raise-row{ display:flex; align-items:center; gap:10px; }
+  .raise-row input[type="range"]{ flex:1; accent-color:var(--gold); }
+  .raise-total{ font-weight:700; min-width:78px; text-align:right; font-family:"IBM Plex Mono",monospace; color:var(--gold); }
+  .preset-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .preset-chip{
+    display:flex; flex-direction:column; align-items:center; gap:4px; background:transparent; border:none; cursor:pointer;
+  }
+  .preset-chip .chip-ico{ width:42px; height:42px; border-width:5px; display:flex; align-items:center; justify-content:center; }
+  .preset-chip .chip-face{
+    width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--chipc); border:5px dashed rgba(255,255,255,.55);
+    box-shadow:0 3px 6px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.3);
+    font-family:"IBM Plex Mono",monospace; font-size:.6rem; font-weight:700; color:var(--chipink,#fff);
+    transition:transform .12s;
+  }
+  .preset-chip:hover .chip-face{ transform:translateY(-3px); }
+  .preset-chip:nth-child(1) .chip-face{ --chipc:#eee6d4; --chipink:#2a1c04; }
+  .preset-chip:nth-child(2) .chip-face{ --chipc:#2f6fb0; --chipink:#fff; }
+  .preset-chip:nth-child(3) .chip-face{ --chipc:#1f7a54; --chipink:#fff; }
+  .preset-chip:nth-child(4) .chip-face{ --chipc:#231f1c; --chipink:var(--gold); }
+  .preset-chip .plabel{ font-size:.6rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim); }
+
+  /* ---------- log ---------- */
+  .log-panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    display:flex; flex-direction:column; height:520px; box-shadow:var(--shadow);
+  }
+  @media (max-width:760px){ .log-panel{ height:280px; } }
+  .log-head{
+    padding:12px 16px; border-bottom:1px solid var(--line);
+    font-size:.68rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--gold);
+    display:flex; justify-content:space-between;
+  }
+  .log-body{ flex:1; overflow-y:auto; padding:12px 16px; font-size:.78rem; line-height:1.65; font-family:"IBM Plex Mono",monospace; }
+  .log-line{ color:var(--ink-dim); margin-bottom:3px; }
+  .log-line.hand-mark{ color:var(--gold); font-weight:600; margin-top:12px; padding-top:8px; border-top:1px solid var(--line); }
+  .log-line.result{ color:var(--ink); font-weight:600; }
+
+  /* ---------- overlays ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(3,6,4,.72); display:none;
+    align-items:center; justify-content:center; padding:20px; z-index:10;
+  }
+  .overlay.open{ display:flex; }
+  .overlay-card{
+    background:var(--surface); border:2px solid var(--gold); border-radius:14px;
+    max-width:480px; width:100%; padding:30px 32px; box-shadow:0 20px 60px rgba(0,0,0,.55);
+  }
+  .overlay-card h2{ font-size:1.55rem; margin-bottom:8px; color:var(--ink); }
+  .overlay-stamp{
+    display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--rail);
+    background:var(--gold);
+    padding:4px 12px; border-radius:20px; margin-bottom:14px;
+  }
+  .overlay-stamp.lose{ color:#fff; background:var(--red); }
+  .showdown-hands{ display:flex; gap:16px; margin:16px 0; flex-wrap:wrap; }
+  .showdown-side{ flex:1; min-width:150px; }
+  .showdown-side .who{ font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:6px; }
+  .showdown-side .cards{ display:flex; gap:6px; margin-bottom:6px; }
+  .showdown-side .cards .card{ width:44px; height:62px; padding:4px 5px; }
+  .showdown-side .cards .card .card-rank{ font-size:.82rem; }
+  .showdown-side .cards .card .card-suit{ font-size:1rem; }
+  .showdown-desc{ font-size:.82rem; font-weight:700; color:var(--gold); }
+  .overlay-foot{ display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+
+  .briefing p{ font-size:.9rem; line-height:1.65; color:var(--ink-dim); margin:0 0 10px; }
+  .briefing b{ color:var(--gold); }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="wordmark">
+      <h1>HalfPoker</h1>
+      <span class="tag" id="handTag">Not started</span>
+      <span class="tag rating-tag" id="ratingTag">Rating 1000</span>
+    </div>
+    <div class="headbtns">
+      <button class="chip-btn" id="rulesBtn" type="button">Rules</button>
+      <button class="chip-btn" id="resetBtn" type="button">Restart Ladder</button>
+    </div>
+  </header>
+
+  <div class="rules-panel" id="rulesPanel">
+    <b>The asymmetry:</b> You (Player 1) always start a match with 500 chips and two fully hidden
+    cards. The house AI (Player 2) holds two cards &mdash; but one of them is exposed face-up the
+    moment it's dealt. Five community cards are shared, revealed Hold'em-style (flop, turn, river).
+    Blinds are fixed at 10/20 and rotate every hand. Best five-card hand out of your two plus the
+    board wins the pot. Drop below the big blind and the match ends.
+    <ul>
+      <li>You are more concealed than the AI &mdash; it leaks nothing back to you.</li>
+      <li><b>The ladder:</b> the AI's stack doubles as its rating, starting at 1000. Beat it and
+      the rating climbs by 100 for your next match &mdash; you always restart at 500, the AI never
+      gets easier.</li>
+      <li>Lose a match and the run ends. Your score is the peak rating you reached.</li>
+    </ul>
+  </div>
+
+  <div class="streets" id="streetSteps"></div>
+
+  <div class="layout">
+    <div class="table">
+      <section class="strip" id="oppStrip">
+        <div class="strip-head">
+          <div class="strip-who">
+            <span class="dot" id="oppDot"></span>
+            <span class="strip-name">Opponent &middot; House AI</span>
+          </div>
+          <span class="stack-display"><span class="chip-ico"></span><span class="strip-stack mono" id="oppStack">1000</span></span>
+        </div>
+        <div class="strip-cards" id="oppCards"></div>
+        <div class="made-hand" id="oppMadeHand"></div>
+      </section>
+
+      <section class="board">
+        <div class="pot-stack"><span class="chip-ico"></span><span class="chip-ico"></span><span class="chip-ico"></span></div>
+        <div class="pot-label">Pot</div>
+        <div class="pot-amount mono" id="potAmount">0</div>
+        <div class="pot-split">
+          <div class="pot-split-side you"><span class="chip-ico"></span><span class="mono" id="potYou">0</span><span class="split-label">You put in</span></div>
+          <div class="pot-split-divider"></div>
+          <div class="pot-split-side ai"><span class="chip-ico"></span><span class="mono" id="potAI">0</span><span class="split-label">AI put in</span></div>
+        </div>
+        <div class="board-cards" id="boardCards"></div>
+      </section>
+
+      <section class="strip" id="youStrip">
+        <div class="strip-head">
+          <div class="strip-who">
+            <span class="dot" id="youDot"></span>
+            <span class="strip-name">You &middot; Player 1</span>
+          </div>
+          <span class="stack-display"><span class="chip-ico"></span><span class="strip-stack mono" id="youStack">500</span></span>
+        </div>
+        <div class="strip-cards" id="youCards"></div>
+        <div class="made-hand" id="youMadeHand"></div>
+      </section>
+
+      <section class="console">
+        <div class="console-status mono" id="consoleStatus">Preparing table&hellip;</div>
+        <div class="console-buttons" id="consoleButtons"></div>
+        <div class="raise-panel" id="raisePanel">
+          <div class="raise-row">
+            <span class="mono" style="font-size:.72rem;color:var(--ink-dim);">Raise to</span>
+            <input type="range" id="raiseSlider">
+            <span class="raise-total mono" id="raiseTotal">0</span>
+          </div>
+          <div class="preset-row" id="presetRow"></div>
+          <div class="console-buttons">
+            <button class="action-btn primary" id="confirmRaiseBtn" type="button">Confirm Raise</button>
+            <button class="action-btn" id="cancelRaiseBtn" type="button">Cancel</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="log-panel">
+      <div class="log-head"><span>Hand History</span><span id="handCounter">Hand 0</span></div>
+      <div class="log-body" id="logBody"></div>
+    </aside>
+  </div>
+</div>
+
+<div class="overlay" id="briefOverlay">
+  <div class="overlay-card briefing">
+    <span class="overlay-stamp">Rating Ladder</span>
+    <h2>HalfPoker</h2>
+    <p>Two players, one shared board, one very unfair information split. <b>You</b> stay fully
+    hidden and always start a match with 500 chips. The <b>house AI</b> plays with one card
+    exposed the entire hand, and its stack is its rating &mdash; starting at 1000. Beat it and the
+    rating climbs 100 for your next match; you never carry chips forward, the AI never gets easier.
+    Blinds are 10 / 20. Lose a match and the run ends &mdash; your score is the peak rating you reached.</p>
+    <div class="overlay-foot">
+      <button class="action-btn primary" id="startBtn" type="button">Start Ladder</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="handOverlay">
+  <div class="overlay-card">
+    <span class="overlay-stamp" id="handStamp">Result</span>
+    <h2 id="handTitle">&nbsp;</h2>
+    <div class="showdown-hands" id="showdownHands"></div>
+    <div class="overlay-foot">
+      <button class="action-btn primary" id="nextHandBtn" type="button">Next Hand &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="matchOverlay">
+  <div class="overlay-card">
+    <span class="overlay-stamp" id="matchStamp">Match Complete</span>
+    <h2 id="matchTitle">&nbsp;</h2>
+    <p class="mono" id="matchSummary" style="color:var(--ink-dim);font-size:.85rem;"></p>
+    <div class="overlay-foot">
+      <button class="action-btn primary" id="newCaseBtn" type="button">New Match</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ constants ============ */
+  var SMALL_BLIND = 10, BIG_BLIND = 20;
+  var START_STACK = { P1: 500, P2: 1000 };
+  var STREETS = ["preflop","flop","turn","river"];
+  var STREET_LABEL = { preflop:"Preflop", flop:"Flop", turn:"Turn", river:"River" };
+  var REVEAL_COUNT = { preflop:0, flop:3, turn:4, river:5 };
+  var AI_TRIALS = 3000, AI_BLUFF = 0.04, AI_AGGRO = 0.20;
+  var AI_RATING_START = 1000, RATING_STEP = 100;
+  var RANK_LABEL = {11:"J",12:"Q",13:"K",14:"A"};
+  var SUIT_SYMBOL = {0:"♠",1:"♥",2:"♦",3:"♣"};
+  var RED_SUITS = {1:true, 2:true};
+
+  /* ============ cards / deck ============ */
+  function makeDeck(){
+    var d = [];
+    for (var r=2;r<=14;r++) for (var s=0;s<4;s++) d.push([r,s]);
+    return d;
+  }
+  function shuffle(arr){
+    for (var i=arr.length-1;i>0;i--){
+      var j = Math.floor(Math.random()*(i+1));
+      var t = arr[i]; arr[i]=arr[j]; arr[j]=t;
+    }
+    return arr;
+  }
+  function cardKey(c){ return c[0]*10+c[1]; }
+  function deckRemaining(known){
+    var ks = {};
+    for (var i=0;i<known.length;i++) ks[cardKey(known[i])] = true;
+    var out = [];
+    var full = makeDeck();
+    for (var j=0;j<full.length;j++) if (!ks[cardKey(full[j])]) out.push(full[j]);
+    return out;
+  }
+  function sampleN(pool, n){
+    var arr = pool.slice();
+    var m = Math.min(n, arr.length);
+    for (var i=0;i<m;i++){
+      var j = i + Math.floor(Math.random()*(arr.length-i));
+      var t = arr[i]; arr[i]=arr[j]; arr[j]=t;
+    }
+    return arr.slice(0, m);
+  }
+  function rankLabel(r){ return RANK_LABEL[r] || String(r); }
+  function cardText(c){ return rankLabel(c[0]) + SUIT_SYMBOL[c[1]]; }
+
+  /* ============ hand evaluator (direct O(n), no combinations) ============ */
+  function bestStraight(sortedUniqueDesc){
+    var rfs = sortedUniqueDesc.slice();
+    if (rfs.indexOf(14) !== -1) rfs.push(1);
+    for (var i=0;i<=rfs.length-5;i++){
+      var w = rfs.slice(i,i+5);
+      if (w[0]-w[4] === 4 && (new Set(w)).size === 5) return w[0];
+    }
+    return null;
+  }
+  function compareHand(a,b){
+    var len = Math.max(a.length,b.length);
+    for (var i=0;i<len;i++){
+      var av = i<a.length ? a[i] : -1;
+      var bv = i<b.length ? b[i] : -1;
+      if (av !== bv) return av-bv;
+    }
+    return 0;
+  }
+  function evaluateBest(cards){
+    var ranks = cards.map(function(c){return c[0];});
+    var suits = cards.map(function(c){return c[1];});
+    var rankCount = new Array(15).fill(0);
+    for (var i=0;i<ranks.length;i++) rankCount[ranks[i]]++;
+    var suitCount = [0,0,0,0];
+    for (var i2=0;i2<suits.length;i2++) suitCount[suits[i2]]++;
+
+    var counts = [];
+    for (var r=0;r<15;r++) if (rankCount[r] > 0) counts.push([rankCount[r], r]);
+    counts.sort(function(a,b){ return (b[0]-a[0]) || (b[1]-a[1]); });
+
+    var topCount = counts[0][0], topRank = counts[0][1];
+    var countsHand;
+    if (topCount === 4){
+      var kicker = Math.max.apply(null, ranks.filter(function(r){return r!==topRank;}));
+      countsHand = [7, topRank, kicker];
+    } else if (topCount === 3 && counts.length > 1 && counts[1][0] >= 2){
+      countsHand = [6, topRank, counts[1][1]];
+    } else if (topCount === 3){
+      var k2 = ranks.filter(function(r){return r!==topRank;}).sort(function(a,b){return b-a;}).slice(0,2);
+      countsHand = [3, topRank].concat(k2);
+    } else if (topCount === 2 && counts.length > 1 && counts[1][0] === 2){
+      var pairHi = topRank, pairLo = counts[1][1];
+      var kk = Math.max.apply(null, ranks.filter(function(r){return r!==pairHi && r!==pairLo;}));
+      countsHand = [2, pairHi, pairLo, kk];
+    } else if (topCount === 2){
+      var k3 = ranks.filter(function(r){return r!==topRank;}).sort(function(a,b){return b-a;}).slice(0,3);
+      countsHand = [1, topRank].concat(k3);
+    } else {
+      var k5 = ranks.slice().sort(function(a,b){return b-a;}).slice(0,5);
+      countsHand = [0].concat(k5);
+    }
+
+    var best = countsHand;
+    var uniqueDesc = Array.from(new Set(ranks)).sort(function(a,b){return b-a;});
+    if (uniqueDesc.length >= 5){
+      var sh = bestStraight(uniqueDesc);
+      if (sh !== null){
+        var straightHand = [4, sh];
+        if (compareHand(straightHand, best) > 0) best = straightHand;
+      }
+    }
+    var flushSuit = -1;
+    for (var s=0;s<4;s++) if (suitCount[s] >= 5){ flushSuit = s; break; }
+    if (flushSuit >= 0){
+      var flushRanks = [];
+      for (var fi=0; fi<cards.length; fi++) if (suits[fi] === flushSuit) flushRanks.push(ranks[fi]);
+      flushRanks.sort(function(a,b){return b-a;});
+      var sfHigh = null;
+      if (flushRanks.length >= 5){
+        var uniqFR = Array.from(new Set(flushRanks)).sort(function(a,b){return b-a;});
+        sfHigh = bestStraight(uniqFR);
+      }
+      var flushHand = sfHigh !== null ? [8, sfHigh] : [5].concat(flushRanks.slice(0,5));
+      if (compareHand(flushHand, best) > 0) best = flushHand;
+    }
+    return best;
+  }
+  function describeHand(h){
+    function nm(r){ return {14:"Ace",13:"King",12:"Queen",11:"Jack"}[r] || String(r); }
+    function pl(r){ return nm(r)+"s"; }
+    switch (h[0]){
+      case 8: return h[1]===14 ? "Royal Flush" : ("Straight Flush, " + nm(h[1]) + " high");
+      case 7: return "Four of a Kind, " + pl(h[1]);
+      case 6: return "Full House, " + pl(h[1]) + " over " + pl(h[2]);
+      case 5: return "Flush, " + nm(h[1]) + " high";
+      case 4: return "Straight, " + nm(h[1]) + " high";
+      case 3: return "Three of a Kind, " + pl(h[1]);
+      case 2: return "Two Pair, " + pl(h[1]) + " and " + pl(h[2]);
+      case 1: return "Pair of " + pl(h[1]);
+      default: return nm(h[1]) + " High";
+    }
+  }
+
+  /* ============ heuristic bot ============ */
+  function estimateEquity(hole, community, knownOpp, pool, trials){
+    var wins = 0;
+    var nOppUnknown = 2 - knownOpp.length;
+    var nBoardNeeded = 5 - community.length;
+    var need = nOppUnknown + nBoardNeeded;
+    for (var t=0;t<trials;t++){
+      var draw = sampleN(pool, need);
+      var oppUnknown = draw.slice(0, nOppUnknown);
+      var boardFill = draw.slice(nOppUnknown);
+      var oppHand = knownOpp.concat(oppUnknown);
+      var fullBoard = community.concat(boardFill);
+      var mine = evaluateBest(hole.concat(fullBoard));
+      var theirs = evaluateBest(oppHand.concat(fullBoard));
+      var c = compareHand(mine, theirs);
+      if (c > 0) wins += 1; else if (c === 0) wins += 0.5;
+    }
+    return wins / trials;
+  }
+  function sizeBet(pot, bigBlind, maxRaise){
+    var size = Math.floor(pot * AI_AGGRO);
+    size = Math.max(bigBlind, size);
+    return Math.min(size, maxRaise);
+  }
+  function botAct(state){
+    var equity = estimateEquity(state.hole, state.community, state.knownOpp, state.pool, state.trials);
+    var pot = state.pot, toCall = state.toCall;
+    var potOdds = toCall > 0 ? toCall/(pot+toCall) : 0;
+    var bluff = Math.random() < AI_BLUFF;
+
+    if (toCall === 0){
+      if (state.maxRaise > 0 && (equity > 0.65 || bluff)){
+        var bet = sizeBet(pot, BIG_BLIND, state.maxRaise);
+        if (bet > 0) return { action:"raise", amount:bet };
+      }
+      return { action:"check", amount:0 };
+    }
+    if (equity < potOdds - 0.03 && !bluff) return { action:"fold", amount:0 };
+    if (state.maxRaise > 0 && (equity > potOdds + 0.30 || bluff)){
+      var raiseAdd = sizeBet(pot, BIG_BLIND, state.maxRaise);
+      return { action:"raise", amount:raiseAdd };
+    }
+    return { action:"call", amount:toCall };
+  }
+
+  /* ============ game state ============ */
+  var G = {};
+  function other(seat){ return seat === "P1" ? "P2" : "P1"; }
+  function label(seat){ return seat === "P1" ? "You" : "Opponent"; }
+
+  function newMatch(){
+    G.rating = AI_RATING_START;
+    G.log = [];
+    startMatchAtRating();
+  }
+
+  function continueLadder(){
+    G.rating += RATING_STEP;
+    startMatchAtRating();
+  }
+
+  function startMatchAtRating(){
+    G.stacks = { P1: START_STACK.P1, P2: G.rating };
+    G.button = "P1";
+    G.handNumber = 0;
+    G.matchOver = false;
+    closeOverlay("matchOverlay");
+    closeOverlay("handOverlay");
+    addLog("hand-mark", "New match — AI rating " + G.rating + ". You start fresh with " + START_STACK.P1 + " chips.");
+    startHand();
+  }
+
+  function startHand(){
+    G.handNumber += 1;
+    var deck = shuffle(makeDeck());
+    G.hole = { P1:[deck.pop(), deck.pop()], P2:[deck.pop(), deck.pop()] };
+    G.exposedCard = G.hole.P2[1];
+    G.community = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+    G.streetIndex = 0;
+    G.street = STREETS[0];
+    var sb = G.button, bb = other(sb);
+    G.sb = sb; G.bb = bb;
+    var sbAmt = Math.min(SMALL_BLIND, G.stacks[sb]);
+    var bbAmt = Math.min(BIG_BLIND, G.stacks[bb]);
+    G.stacks[sb] -= sbAmt; G.stacks[bb] -= bbAmt;
+    G.pot = sbAmt + bbAmt;
+    G.handContrib = { P1:0, P2:0 };
+    G.handContrib[sb] += sbAmt; G.handContrib[bb] += bbAmt;
+    G.streetContrib = {}; G.streetContrib[sb] = sbAmt; G.streetContrib[bb] = bbAmt;
+    G.currentBet = Math.max(sbAmt, bbAmt);
+    G.acted = { P1:false, P2:false };
+    G.actor = sb;
+    G.folded = null;
+    G.wentToShowdown = false;
+    G.winner = null;
+    G.stage = "betting";
+    G.newlyRevealed = false;
+
+    addLog("hand-mark", "Hand " + G.handNumber + " — " + label(sb) + " is button/SB (" + sbAmt + "), " + label(bb) + " is BB (" + bbAmt + ")");
+    addLog(null, "Your hole cards: " + G.hole.P1.map(cardText).join(" "));
+    addLog(null, "Opponent shows: " + cardText(G.exposedCard) + " (one card hidden)");
+
+    render();
+    setTimeout(driveActor, 500);
+  }
+
+  function toCallFor(seat){ return G.currentBet - G.streetContrib[seat]; }
+  function maxRaiseFor(seat){
+    var call = Math.min(toCallFor(seat), G.stacks[seat]);
+    var ownRoom = Math.max(G.stacks[seat] - call, 0);
+    // A raise can never exceed what the opponent could still match — once
+    // they're covered (all-in or short-stacked), there's nobody left to call
+    // any more, so raising further would just donate uncalled chips.
+    var opp = other(seat);
+    var oppCapacity = G.streetContrib[opp] + G.stacks[opp];
+    var oppRoom = Math.max(oppCapacity - G.currentBet, 0);
+    return Math.max(Math.min(ownRoom, oppRoom), 0);
+  }
+  function roundComplete(){
+    if (G.stacks.P1 === 0 && G.stacks.P2 === 0) return true;
+    return G.streetContrib.P1 === G.streetContrib.P2 && G.acted.P1 && G.acted.P2;
+  }
+
+  function driveActor(){
+    if (G.stage !== "betting") return;
+    if (G.stacks.P1 === 0 && G.stacks.P2 === 0){ finishBettingRound(); return; }
+    if (G.stacks[G.actor] === 0){
+      G.acted[G.actor] = true;
+      G.actor = other(G.actor);
+      if (roundComplete()) finishBettingRound(); else driveActor();
+      return;
+    }
+    render();
+    if (G.actor === "P2") setTimeout(runAITurn, 550 + Math.random()*450);
+  }
+
+  function applyAction(seat, action, amount){
+    var toCall = Math.min(toCallFor(seat), G.stacks[seat]);
+    if (action === "fold"){
+      G.folded = seat;
+      G.stage = "resolve";
+      addLog(null, label(seat) + " folds.");
+      return;
+    }
+    if (action === "check"){
+      G.acted[seat] = true;
+      addLog(null, label(seat) + " checks.");
+    } else if (action === "call"){
+      var pay = Math.min(toCall, G.stacks[seat]);
+      G.stacks[seat] -= pay; G.streetContrib[seat] += pay; G.pot += pay; G.handContrib[seat] += pay; G.acted[seat] = true;
+      addLog(null, label(seat) + " calls " + pay + (G.stacks[seat]===0 && pay>0 ? " (all-in)" : "") + ".");
+    } else if (action === "raise"){
+      var maxRaise = maxRaiseFor(seat);
+      var raiseAdd = Math.min(Math.max(amount,0), maxRaise);
+      var pay2 = Math.min(toCall + raiseAdd, G.stacks[seat]);
+      G.stacks[seat] -= pay2; G.streetContrib[seat] += pay2; G.pot += pay2; G.handContrib[seat] += pay2;
+      G.currentBet = G.streetContrib[seat];
+      G.acted[seat] = true; G.acted[other(seat)] = false;
+      addLog(null, label(seat) + " raises to " + G.streetContrib[seat] + (G.stacks[seat]===0 ? " (all-in)" : "") + ".");
+    }
+    G.actor = other(seat);
+  }
+
+  function runAITurn(){
+    var toCall = Math.min(toCallFor("P2"), G.stacks.P2);
+    var maxRaise = maxRaiseFor("P2");
+    var communityVisible = G.community.slice(0, REVEAL_COUNT[G.street]);
+    var known = G.hole.P2.concat(communityVisible);
+    var pool = deckRemaining(known);
+    var decision = botAct({
+      hole: G.hole.P2, community: communityVisible, knownOpp: [],
+      pool: pool, pot: G.pot, toCall: toCall, maxRaise: maxRaise, trials: AI_TRIALS
+    });
+    applyAction("P2", decision.action, decision.amount);
+    afterAction();
+  }
+
+  function afterAction(){
+    render();
+    if (G.folded){ setTimeout(resolveFold, 300); return; }
+    if (roundComplete()) finishBettingRound();
+    else driveActor();
+  }
+
+  function handleHumanAction(action, amount){
+    if (G.stage !== "betting" || G.actor !== "P1") return;
+    applyAction("P1", action, amount);
+    afterAction();
+  }
+
+  function finishBettingRound(){
+    if (G.streetIndex >= STREETS.length - 1){ goToShowdown(); return; }
+    G.streetIndex += 1;
+    G.street = STREETS[G.streetIndex];
+    G.streetContrib = { P1:0, P2:0 };
+    G.currentBet = 0;
+    G.acted = { P1:false, P2:false };
+    G.actor = G.bb;
+    render();
+    if (G.stacks.P1 === 0 && G.stacks.P2 === 0){
+      setTimeout(finishBettingRound, 750);
+      return;
+    }
+    setTimeout(driveActor, 500);
+  }
+
+  function goToShowdown(){
+    G.stage = "resolve";
+    G.wentToShowdown = true;
+    var p1Best = evaluateBest(G.hole.P1.concat(G.community));
+    var p2Best = evaluateBest(G.hole.P2.concat(G.community));
+    var cmp = compareHand(p1Best, p2Best);
+    var winner;
+    if (cmp > 0){ G.stacks.P1 += G.pot; winner = "P1"; }
+    else if (cmp < 0){ G.stacks.P2 += G.pot; winner = "P2"; }
+    else {
+      var half = Math.floor(G.pot/2);
+      G.stacks.P1 += half; G.stacks.P2 += G.pot - half;
+      winner = "split";
+    }
+    G.winner = winner; G.p1Best = p1Best; G.p2Best = p2Best;
+    addLog(null, "Showdown: you show " + G.hole.P1.map(cardText).join(" ") + ", opponent shows " + G.hole.P2.map(cardText).join(" ") + ".");
+    addLog("result", (winner === "split" ? "Split pot of " + G.pot + "." : label(winner) + " wins pot of " + G.pot + "."));
+    render();
+    showHandOverlay();
+  }
+
+  function resolveFold(){
+    var winner = G.folded === "P1" ? "P2" : "P1";
+    G.stacks[winner] += G.pot;
+    G.winner = winner;
+    G.wentToShowdown = false;
+    addLog("result", label(winner) + " wins pot of " + G.pot + " (opponent folded).");
+    render();
+    showHandOverlay();
+  }
+
+  /* ============ rendering ============ */
+  function addLog(kind, text){
+    G.log.push({ kind: kind, text: text });
+  }
+
+  function cardHTML(card, extraClass){
+    var red = RED_SUITS[card[1]];
+    return '<div class="card ' + (red?'red':'black') + (extraClass?(' '+extraClass):'') + '">' +
+      '<span class="card-rank">' + rankLabel(card[0]) + '</span>' +
+      '<span class="card-suit">' + SUIT_SYMBOL[card[1]] + '</span></div>';
+  }
+  function redactedHTML(){
+    return '<div class="card redacted"><span class="redacted-label">&#9824;</span></div>';
+  }
+  function emptyHTML(){
+    return '<div class="card empty"></div>';
+  }
+  function exposedWrapHTML(card){
+    return '<div class="card-wrap"><span class="stamp">Exposed</span>' + cardHTML(card) + '</div>';
+  }
+
+  function el(id){ return document.getElementById(id); }
+
+  function render(){
+    if (!G.stacks) return;
+    el("handTag").textContent = G.matchOver ? "Match complete" : ("Hand " + G.handNumber);
+    el("ratingTag").textContent = "Rating " + G.rating;
+    el("handCounter").textContent = "Hand " + G.handNumber;
+    el("youStack").textContent = G.stacks.P1;
+    el("oppStack").textContent = G.stacks.P2;
+    el("youDot").className = "dot" + (G.button === "P1" ? " on" : "");
+    el("oppDot").className = "dot" + (G.button === "P2" ? " on" : "");
+    el("potAmount").textContent = G.pot || 0;
+    el("potYou").textContent = (G.handContrib && G.handContrib.P1) || 0;
+    el("potAI").textContent = (G.handContrib && G.handContrib.P2) || 0;
+
+    /* street steps */
+    var stepsHtml = "";
+    for (var i=0;i<STREETS.length;i++){
+      var s = STREETS[i];
+      var cls = "step";
+      if (s === G.street) cls += " active"; else if (i < G.streetIndex) cls += " done";
+      stepsHtml += '<div class="' + cls + '">' + STREET_LABEL[s] + '</div>';
+    }
+    el("streetSteps").innerHTML = stepsHtml;
+
+    var revealCount = REVEAL_COUNT[G.street] || 0;
+    var visibleCommunity = (G.community || []).slice(0, revealCount);
+
+    /* your cards + your made hand, using everything you can see */
+    el("youCards").innerHTML = (G.hole.P1 || []).map(function(c){ return cardHTML(c); }).join("");
+    if (G.hole.P1){
+      var youSeen = G.hole.P1.concat(visibleCommunity);
+      el("youMadeHand").innerHTML = youSeen.length >= 5
+        ? describeHand(G.wentToShowdown && G.p1Best ? G.p1Best : evaluateBest(youSeen))
+        : '<span class="fyi">Hand forms after the flop</span>';
+    }
+
+    /* opponent cards: card0 hidden until showdown, card1 exposed always */
+    var oppHtml = "";
+    if (G.hole.P2){
+      oppHtml += (G.wentToShowdown ? cardHTML(G.hole.P2[0], "reveal-in") : redactedHTML());
+      oppHtml += exposedWrapHTML(G.hole.P2[1]);
+    }
+    el("oppCards").innerHTML = oppHtml;
+
+    /* opponent's made hand, from ONLY what you can actually see: their one
+       exposed card plus the board. Their real hand (with the hidden card)
+       can only be this good or better — shown as a floor, not the truth,
+       until showdown reveals the real thing. */
+    if (G.hole.P2){
+      if (G.wentToShowdown && G.p2Best){
+        el("oppMadeHand").textContent = describeHand(G.p2Best);
+      } else {
+        var oppSeen = [G.exposedCard].concat(visibleCommunity);
+        el("oppMadeHand").innerHTML = oppSeen.length >= 5
+          ? 'At least: ' + describeHand(evaluateBest(oppSeen))
+          : '<span class="fyi">Only one card revealed so far</span>';
+      }
+    }
+
+    /* board */
+    var boardHtml = "";
+    for (var b=0;b<5;b++){
+      if (G.community && b < revealCount) boardHtml += cardHTML(G.community[b]);
+      else boardHtml += emptyHTML();
+    }
+    el("boardCards").innerHTML = boardHtml;
+
+    renderConsole();
+    renderLog();
+  }
+
+  function renderConsole(){
+    var statusEl = el("consoleStatus");
+    var btnsEl = el("consoleButtons");
+    var raisePanel = el("raisePanel");
+    btnsEl.innerHTML = "";
+    raisePanel.classList.remove("open");
+
+    if (G.matchOver){ statusEl.textContent = "The match is complete."; return; }
+    if (G.stage === "resolve"){ statusEl.textContent = "Hand resolved — see the note above."; return; }
+    if (G.actor !== "P1"){
+      statusEl.textContent = "Opponent is deciding…";
+      return;
+    }
+
+    var toCall = Math.min(toCallFor("P1"), G.stacks.P1);
+    var maxRaise = maxRaiseFor("P1");
+    var moveText = toCall > 0
+      ? ("Your move — " + toCall + " to call, pot is " + G.pot)
+      : ("Your move — nothing owed, pot is " + G.pot);
+    var oddsText = toCall > 0 ? ("Pot odds " + Math.round((toCall / (G.pot + toCall)) * 100) + "%") : "";
+    statusEl.innerHTML = '<span>' + moveText + '</span>' + (oddsText ? '<span class="odds">' + oddsText + '</span>' : '');
+
+    var html = "";
+    if (toCall > 0) html += '<button class="action-btn warn" data-act="fold">Fold</button>';
+    html += toCall > 0
+      ? '<button class="action-btn" data-act="call">Call ' + toCall + '</button>'
+      : '<button class="action-btn" data-act="check">Check</button>';
+    if (maxRaise > 0) html += '<button class="action-btn primary" data-act="openraise">' + (toCall>0?'Raise':'Bet') + '</button>';
+    btnsEl.innerHTML = html;
+
+    var fold = btnsEl.querySelector('[data-act="fold"]');
+    if (fold) fold.onclick = function(){ handleHumanAction("fold", 0); };
+    var callBtn = btnsEl.querySelector('[data-act="call"]');
+    if (callBtn) callBtn.onclick = function(){ handleHumanAction("call", toCall); };
+    var checkBtn = btnsEl.querySelector('[data-act="check"]');
+    if (checkBtn) checkBtn.onclick = function(){ handleHumanAction("check", 0); };
+    var openRaise = btnsEl.querySelector('[data-act="openraise"]');
+    if (openRaise) openRaise.onclick = function(){ openRaisePanel(toCall, maxRaise); };
+  }
+
+  function openRaisePanel(toCall, maxRaise){
+    var panel = el("raisePanel");
+    panel.classList.add("open");
+    var minAdd = Math.min(BIG_BLIND, maxRaise);
+    var minTo = G.currentBet + minAdd;
+    var maxTo = G.currentBet + maxRaise;
+    var slider = el("raiseSlider");
+    slider.min = minTo; slider.max = Math.max(maxTo, minTo); slider.value = minTo;
+    el("raiseTotal").textContent = minTo;
+    slider.oninput = function(){ el("raiseTotal").textContent = slider.value; };
+
+    var presets = [
+      { label:"Min", to: minTo },
+      { label:"Half Pot", to: G.currentBet + Math.min(Math.max(Math.floor(G.pot*0.5), minAdd), maxRaise) },
+      { label:"Pot", to: G.currentBet + Math.min(Math.max(G.pot, minAdd), maxRaise) },
+      { label:"All In", to: maxTo }
+    ];
+    function chipLabel(n){
+      if (n >= 1000) return (Math.round(n/100)/10) + "k";
+      return String(n);
+    }
+    var pr = el("presetRow");
+    pr.innerHTML = presets.map(function(p,idx){
+      return '<button class="preset-chip" data-idx="'+idx+'" title="Raise to '+p.to+'">' +
+        '<span class="chip-face">'+chipLabel(p.to)+'</span><span class="plabel">'+p.label+'</span></button>';
+    }).join("");
+    Array.prototype.forEach.call(pr.querySelectorAll(".preset-chip"), function(btn){
+      btn.onclick = function(){
+        var p = presets[Number(btn.getAttribute("data-idx"))];
+        slider.value = p.to;
+        el("raiseTotal").textContent = p.to;
+      };
+    });
+
+    el("confirmRaiseBtn").onclick = function(){
+      var to = Number(slider.value);
+      var raiseAdd = to - G.currentBet;
+      panel.classList.remove("open");
+      handleHumanAction("raise", raiseAdd);
+    };
+    el("cancelRaiseBtn").onclick = function(){ panel.classList.remove("open"); renderConsole(); };
+  }
+
+  function renderLog(){
+    var body = el("logBody");
+    body.innerHTML = G.log.map(function(l){
+      var cls = "log-line" + (l.kind ? (" " + l.kind) : "");
+      return '<div class="' + cls + '">' + l.text + '</div>';
+    }).join("");
+    body.scrollTop = body.scrollHeight;
+  }
+
+  /* ============ overlays ============ */
+  function openOverlay(id){ el(id).classList.add("open"); }
+  function closeOverlay(id){ el(id).classList.remove("open"); }
+
+  function showHandOverlay(){
+    var stamp = el("handStamp"), title = el("handTitle"), hands = el("showdownHands");
+    if (G.winner === "P1"){
+      stamp.textContent = "You Win"; stamp.classList.remove("lose");
+      title.textContent = "You win " + G.pot + " chips";
+    } else if (G.winner === "P2"){
+      stamp.textContent = "You Lose"; stamp.classList.add("lose");
+      title.textContent = "Opponent wins " + G.pot + " chips";
+    } else {
+      stamp.textContent = "Split Pot"; stamp.classList.remove("lose");
+      title.textContent = "Split pot — " + G.pot + " chips";
+    }
+
+    if (G.wentToShowdown){
+      hands.innerHTML =
+        '<div class="showdown-side"><div class="who">You</div><div class="cards">' +
+          G.hole.P1.map(function(c){return cardHTML(c);}).join("") + '</div>' +
+          '<div class="showdown-desc">' + describeHand(G.p1Best) + '</div></div>' +
+        '<div class="showdown-side"><div class="who">Opponent</div><div class="cards">' +
+          G.hole.P2.map(function(c){return cardHTML(c);}).join("") + '</div>' +
+          '<div class="showdown-desc">' + describeHand(G.p2Best) + '</div></div>';
+    } else {
+      hands.innerHTML = '<div class="showdown-side"><div class="who">' + label(G.folded) + ' folded</div></div>';
+    }
+    openOverlay("handOverlay");
+  }
+
+  function proceedAfterHand(){
+    closeOverlay("handOverlay");
+    if (G.stacks.P1 < BIG_BLIND || G.stacks.P2 < BIG_BLIND){
+      G.matchOver = true;
+      G.matchWon = G.stacks.P2 < BIG_BLIND;
+      showMatchOverlay();
+      render();
+      return;
+    }
+    G.button = other(G.button);
+    startHand();
+  }
+
+  function showMatchOverlay(){
+    var stamp = el("matchStamp"), title = el("matchTitle"), summary = el("matchSummary"), footBtn = el("newCaseBtn");
+    if (G.matchWon){
+      stamp.textContent = "Match Won"; stamp.classList.remove("lose");
+      title.textContent = "You beat the rating-" + G.rating + " AI";
+      summary.textContent = "AI rating climbs to " + (G.rating + RATING_STEP) + " for the next match. This match lasted " + G.handNumber + " hands.";
+      footBtn.textContent = "Next Match →";
+      footBtn.onclick = function(){ continueLadder(); };
+    } else {
+      stamp.textContent = "Run Over"; stamp.classList.add("lose");
+      title.textContent = "You busted against rating " + G.rating;
+      summary.textContent = "Peak AI rating reached: " + G.rating + ". This match lasted " + G.handNumber + " hands.";
+      footBtn.textContent = "Restart Ladder";
+      footBtn.onclick = function(){ newMatch(); };
+    }
+    openOverlay("matchOverlay");
+  }
+
+  /* ============ wiring ============ */
+  el("startBtn").onclick = function(){ closeOverlay("briefOverlay"); newMatch(); };
+  el("nextHandBtn").onclick = proceedAfterHand;
+  el("rulesBtn").onclick = function(){ el("rulesPanel").classList.toggle("open"); };
+
+  var resetArmed = false, resetTimer = null;
+  el("resetBtn").onclick = function(){
+    if (!resetArmed){
+      resetArmed = true;
+      el("resetBtn").textContent = "Confirm?";
+      el("resetBtn").classList.add("armed");
+      resetTimer = setTimeout(function(){
+        resetArmed = false;
+        el("resetBtn").textContent = "Restart Ladder";
+        el("resetBtn").classList.remove("armed");
+      }, 2800);
+      return;
+    }
+    clearTimeout(resetTimer);
+    resetArmed = false;
+    el("resetBtn").textContent = "New Match";
+    el("resetBtn").classList.remove("armed");
+    closeOverlay("handOverlay");
+    closeOverlay("matchOverlay");
+    newMatch();
+  };
+
+  /* expose a tiny self-test hook for verification (both seats AI-driven) */
+  window.__halfpokerSelfTest = function(n){
+    n = n || 200;
+    var wins = { P1:0, P2:0, split:0 };
+    for (var i=0;i<n;i++){
+      var stacks = { P1: START_STACK.P1, P2: START_STACK.P2 };
+      var button = i % 2 === 0 ? "P1" : "P2";
+      var deck = shuffle(makeDeck());
+      var hole = { P1:[deck.pop(),deck.pop()], P2:[deck.pop(),deck.pop()] };
+      var community = [deck.pop(),deck.pop(),deck.pop(),deck.pop(),deck.pop()];
+      var p1b = evaluateBest(hole.P1.concat(community));
+      var p2b = evaluateBest(hole.P2.concat(community));
+      var c = compareHand(p1b, p2b);
+      if (c>0) wins.P1++; else if (c<0) wins.P2++; else wins.split++;
+    }
+    console.log("self-test evaluator over", n, "hands:", wins);
+    return wins;
+  };
+
+  openOverlay("briefOverlay");
+  render();
+})();
+</script>
