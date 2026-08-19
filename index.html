@@ -268,13 +268,15 @@
     padding:4px 12px; border-radius:20px; margin-bottom:14px;
   }
   .overlay-stamp.lose{ color:#fff; background:var(--red); }
-  .showdown-hands{ display:flex; gap:16px; margin:16px 0; flex-wrap:wrap; }
-  .showdown-side{ flex:1; min-width:150px; }
+  .showdown-hands{ display:flex; flex-direction:column; gap:14px; margin:16px 0; }
+  .showdown-note{ font-size:.72rem; font-style:italic; color:var(--ink-dim); margin:0; }
   .showdown-side .who{ font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:6px; }
-  .showdown-side .cards{ display:flex; gap:6px; margin-bottom:6px; }
-  .showdown-side .cards .card{ width:44px; height:62px; padding:4px 5px; }
+  .showdown-side .cards{ display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap; }
+  .showdown-side .cards .card{ width:44px; height:62px; padding:4px 5px; transition:opacity .2s, filter .2s; }
   .showdown-side .cards .card .card-rank{ font-size:.82rem; }
   .showdown-side .cards .card .card-suit{ font-size:1rem; }
+  .showdown-side .cards .card:not(.omit){ box-shadow:0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.5) inset; }
+  .showdown-side .cards .card.omit{ opacity:.32; filter:grayscale(70%); }
   .showdown-desc{ font-size:.82rem; font-weight:700; color:var(--gold); }
   .overlay-foot{ display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
 
@@ -342,6 +344,13 @@
       box-shadow:0 10px 30px rgba(0,0,0,.5);
     }
     .log-panel.open{ display:flex; }
+
+    .overlay{ padding:12px; }
+    .overlay-card{ padding:20px 18px; }
+    .showdown-side .cards{ gap:4px; }
+    .showdown-side .cards .card{ width:33px; height:46px; padding:3px 4px; }
+    .showdown-side .cards .card .card-rank{ font-size:.6rem; }
+    .showdown-side .cards .card .card-suit{ font-size:.72rem; }
   }
 </style>
 
@@ -621,6 +630,55 @@
     }
   }
 
+  /* Given a 7-card set (hole + board) and the already-computed evaluateBest()
+     value for it, work out exactly which 5 cards make up that hand — used
+     only at showdown, to show the player which cards counted and which two
+     were left out. Reuses evaluateBest's verdict rather than re-deriving it,
+     so it can never disagree with the value that decided the winner. */
+  function cardsForRank(cards, rank, n){
+    var out = [];
+    for (var i=0;i<cards.length;i++){ if (cards[i][0]===rank){ out.push(cards[i]); if (out.length>=n) break; } }
+    return out;
+  }
+  function findFlushSuit(cards, minCount){
+    var suitCount = [0,0,0,0];
+    for (var i=0;i<cards.length;i++) suitCount[cards[i][1]]++;
+    for (var s=0;s<4;s++) if (suitCount[s] >= minCount) return s;
+    return -1;
+  }
+  function cardsForValue(cards, value){
+    var type = value[0];
+    if (type === 8 || type === 5){ // straight flush / flush
+      var suit = findFlushSuit(cards, 5);
+      var suited = cards.filter(function(c){ return c[1]===suit; });
+      if (type === 8){
+        var sh = value[1];
+        var needed = sh===5 ? [14,5,4,3,2] : [sh,sh-1,sh-2,sh-3,sh-4];
+        return needed.map(function(r){ return suited.filter(function(c){return c[0]===r;})[0]; });
+      }
+      return value.slice(1).map(function(r){ return suited.filter(function(c){return c[0]===r;})[0]; });
+    }
+    if (type === 7) return cardsForRank(cards, value[1], 4).concat(cardsForRank(cards, value[2], 1));
+    if (type === 6) return cardsForRank(cards, value[1], 3).concat(cardsForRank(cards, value[2], 2));
+    if (type === 4){
+      var sh4 = value[1];
+      var needed4 = sh4===5 ? [14,5,4,3,2] : [sh4,sh4-1,sh4-2,sh4-3,sh4-4];
+      return needed4.map(function(r){ return cardsForRank(cards, r, 1)[0]; });
+    }
+    if (type === 3) return cardsForRank(cards, value[1], 3).concat(cardsForRank(cards, value[2], 1)).concat(cardsForRank(cards, value[3], 1));
+    if (type === 2) return cardsForRank(cards, value[1], 2).concat(cardsForRank(cards, value[2], 2)).concat(cardsForRank(cards, value[3], 1));
+    if (type === 1) return cardsForRank(cards, value[1], 2).concat(cardsForRank(cards, value[2], 1)).concat(cardsForRank(cards, value[3], 1)).concat(cardsForRank(cards, value[4], 1));
+    return value.slice(1).map(function(r){ return cardsForRank(cards, r, 1)[0]; }); // type 0, high card
+  }
+  function bestFiveCards(cards){
+    var value = evaluateBest(cards);
+    var used = cardsForValue(cards, value);
+    var usedKeys = {};
+    used.forEach(function(c){ usedKeys[cardKey(c)] = true; });
+    var unused = cards.filter(function(c){ return !usedKeys[cardKey(c)]; });
+    return { value: value, used: used, unused: unused };
+  }
+
   /* ============ heuristic bot ============ */
   function estimateEquity(hole, community, knownOpp, pool, trials){
     var wins = 0;
@@ -830,8 +888,9 @@
   function goToShowdown(){
     G.stage = "resolve";
     G.wentToShowdown = true;
-    var p1Best = evaluateBest(G.hole.P1.concat(G.community));
-    var p2Best = evaluateBest(G.hole.P2.concat(G.community));
+    var p1Result = bestFiveCards(G.hole.P1.concat(G.community));
+    var p2Result = bestFiveCards(G.hole.P2.concat(G.community));
+    var p1Best = p1Result.value, p2Best = p2Result.value;
     var cmp = compareHand(p1Best, p2Best);
     var winner;
     if (cmp > 0){ G.stacks.P1 += G.pot; winner = "P1"; }
@@ -842,6 +901,7 @@
       winner = "split";
     }
     G.winner = winner; G.p1Best = p1Best; G.p2Best = p2Best;
+    G.p1Result = p1Result; G.p2Result = p2Result;
     addLog(null, "Showdown: you show " + G.hole.P1.map(cardText).join(" ") + ", opponent shows " + G.hole.P2.map(cardText).join(" ") + ".");
     addLog("result", (winner === "split" ? "Split pot of " + G.pot + "." : label(winner) + " wins pot of " + G.pot + "."));
     render();
@@ -1061,13 +1121,18 @@
     }
 
     if (G.wentToShowdown){
+      function sideHTML(who, holeCards, result){
+        var all = holeCards.concat(G.community);
+        var unusedKeys = {};
+        result.unused.forEach(function(c){ unusedKeys[cardKey(c)] = true; });
+        var cardsHtml = all.map(function(c){ return cardHTML(c, unusedKeys[cardKey(c)] ? "omit" : ""); }).join("");
+        return '<div class="showdown-side"><div class="who">' + who + '</div><div class="cards">' +
+          cardsHtml + '</div><div class="showdown-desc">' + describeHand(result.value) + '</div></div>';
+      }
       hands.innerHTML =
-        '<div class="showdown-side"><div class="who">You</div><div class="cards">' +
-          G.hole.P1.map(function(c){return cardHTML(c);}).join("") + '</div>' +
-          '<div class="showdown-desc">' + describeHand(G.p1Best) + '</div></div>' +
-        '<div class="showdown-side"><div class="who">Opponent</div><div class="cards">' +
-          G.hole.P2.map(function(c){return cardHTML(c);}).join("") + '</div>' +
-          '<div class="showdown-desc">' + describeHand(G.p2Best) + '</div></div>';
+        '<p class="showdown-note">Faded cards weren’t part of the best 5-card hand.</p>' +
+        sideHTML("You", G.hole.P1, G.p1Result) +
+        sideHTML("Opponent", G.hole.P2, G.p2Result);
     } else {
       hands.innerHTML = '<div class="showdown-side"><div class="who">' + label(G.folded) + ' folded</div></div>';
     }
