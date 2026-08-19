@@ -362,6 +362,7 @@
       <span class="tag rating-tag" id="ratingTag">Rating 1000</span>
     </div>
     <div class="headbtns">
+      <button class="chip-btn" id="soundBtn" type="button">🔊 Sound</button>
       <button class="chip-btn" id="rulesBtn" type="button">Rules</button>
       <button class="chip-btn" id="historyBtn" type="button">History</button>
       <button class="chip-btn" id="resetBtn" type="button">Restart Ladder</button>
@@ -724,6 +725,171 @@
     return { action:"call", amount:toCall };
   }
 
+  /* ============ sound ============ */
+  /* Everything here is synthesized with the Web Audio API — no audio files,
+     so the page stays a single self-contained file with zero extra requests.
+     Browsers require a user gesture before audio can start, which is
+     naturally satisfied since every sfx()/background call happens inside a
+     click handler somewhere in the chain. */
+  var audioCtx = null;
+  var soundEnabled = (function(){
+    try { return localStorage.getItem("hp_sound_muted") !== "1"; } catch(e){ return true; }
+  })();
+  function ensureAudio(){
+    if (!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(freq, start, dur, opts){
+    opts = opts || {};
+    var ctx = ensureAudio();
+    if (!ctx || !soundEnabled) return;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = opts.type || "sine";
+    var t0 = ctx.currentTime + (start || 0);
+    osc.frequency.setValueAtTime(freq, t0);
+    if (opts.sweepTo) osc.frequency.exponentialRampToValueAtTime(Math.max(opts.sweepTo, 1), t0 + dur);
+    var peak = opts.gain != null ? opts.gain : 0.16;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak, t0 + Math.min(0.015, dur * 0.3));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noiseBurst(start, dur, opts){
+    opts = opts || {};
+    var ctx = ensureAudio();
+    if (!ctx || !soundEnabled) return;
+    var t0 = ctx.currentTime + (start || 0);
+    var bufSize = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    var buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i=0;i<bufSize;i++) data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufSize, 2);
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var filter = ctx.createBiquadFilter();
+    filter.type = opts.filterType || "bandpass";
+    filter.frequency.value = opts.freq || 2200;
+    filter.Q.value = opts.q || 0.8;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(opts.gain != null ? opts.gain : 0.2, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    src.start(t0); src.stop(t0 + dur + 0.03);
+  }
+  function sfx(name){
+    switch (name){
+      case "deal": noiseBurst(0, 0.09, { freq:2600, gain:0.16 }); break;
+      case "flip": noiseBurst(0, 0.07, { freq:3200, gain:0.14 }); break;
+      case "check": tone(320, 0, 0.09, { type:"triangle", gain:0.14 }); break;
+      case "call": // one clean chip clink
+        tone(1100, 0, 0.06, { type:"square", gain:0.10 });
+        tone(1500, 0.05, 0.07, { type:"square", gain:0.09 });
+        break;
+      case "raise": // a rising "stakes just went up" sting, then a chip stack
+        tone(500, 0, 0.10, { type:"sawtooth", gain:0.09, sweepTo:900 });
+        tone(950, 0.09, 0.06, { type:"square", gain:0.11 });
+        tone(1250, 0.15, 0.06, { type:"square", gain:0.10 });
+        tone(1600, 0.21, 0.09, { type:"square", gain:0.11 });
+        break;
+      case "fold": tone(340, 0, 0.28, { type:"sawtooth", gain:0.13, sweepTo:120 }); break;
+      case "win": // hand won
+        tone(523.25, 0, 0.14, { gain:0.16 });
+        tone(659.25, 0.11, 0.14, { gain:0.16 });
+        tone(783.99, 0.22, 0.24, { gain:0.18 });
+        break;
+      case "lose": // hand lost
+        tone(392.00, 0, 0.16, { gain:0.14 });
+        tone(329.63, 0.13, 0.16, { gain:0.13 });
+        tone(261.63, 0.26, 0.32, { gain:0.13 });
+        break;
+      case "split":
+        tone(440, 0, 0.12, { gain:0.14 });
+        tone(440, 0.13, 0.16, { gain:0.13 });
+        break;
+      case "matchWin": // whole ladder match won — bigger fanfare
+        tone(523.25, 0, 0.15, { gain:0.17 });
+        tone(659.25, 0.12, 0.15, { gain:0.17 });
+        tone(783.99, 0.24, 0.15, { gain:0.18 });
+        tone(1046.50, 0.36, 0.16, { gain:0.19 });
+        tone(1318.51, 0.48, 0.42, { gain:0.2 });
+        tone(783.99, 0.48, 0.42, { gain:0.11 });
+        break;
+      case "matchLose": // run over
+        tone(349.23, 0, 0.2, { gain:0.15 });
+        tone(293.66, 0.17, 0.2, { gain:0.14 });
+        tone(233.08, 0.34, 0.45, { gain:0.15, sweepTo:170 });
+        break;
+      case "click": tone(700, 0, 0.045, { type:"triangle", gain:0.07 }); break;
+    }
+  }
+
+  /* mood-adaptive background pad — three soft detuned tones whose pitch,
+     brightness and shimmer speed drift based on how many chips you're
+     holding relative to your 500-chip start: low stack = darker/tenser,
+     big stack = brighter/warmer. Purely generative, so it needs no file. */
+  var bg = { running:false, lastStack:null };
+  function startBackgroundMusic(){
+    var ctx = ensureAudio();
+    if (!ctx || !soundEnabled || bg.running) return;
+    var master = ctx.createGain();
+    master.gain.value = 0.05;
+    master.connect(ctx.destination);
+    var filter = ctx.createBiquadFilter();
+    filter.type = "lowpass"; filter.frequency.value = 900; filter.Q.value = 0.6;
+    filter.connect(master);
+    var oscs = [110, 165, 220].map(function(f){
+      var o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = f;
+      var g = ctx.createGain(); g.gain.value = 0.5;
+      o.connect(g); g.connect(filter); o.start();
+      return { osc:o, gain:g };
+    });
+    var lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.08;
+    var lfoGain = ctx.createGain(); lfoGain.gain.value = 150;
+    lfo.connect(lfoGain); lfoGain.connect(filter.frequency); lfo.start();
+    bg.ctx = ctx; bg.master = master; bg.filter = filter; bg.oscs = oscs; bg.lfo = lfo;
+    bg.running = true; bg.lastStack = null;
+    updateBackgroundMood();
+  }
+  function stopBackgroundMusic(){
+    if (!bg.running) return;
+    try { bg.oscs.forEach(function(o){ o.osc.stop(); }); bg.lfo.stop(); } catch(e){}
+    bg.running = false;
+  }
+  function updateBackgroundMood(){
+    if (!bg.running || !G.stacks) return;
+    if (bg.lastStack === G.stacks.P1) return;
+    bg.lastStack = G.stacks.P1;
+    var ratio = Math.max(0, Math.min(G.stacks.P1 / START_STACK.P1, 2));
+    var t = bg.ctx.currentTime;
+    var filterFreq = 480 + ratio * 720;
+    bg.filter.frequency.cancelScheduledValues(t);
+    bg.filter.frequency.linearRampToValueAtTime(filterFreq, t + 2);
+    var intervals = ratio < 0.5 ? [1, 1.189, 1.5] : [1, 1.25, 1.5]; // tense minor-ish vs warm major-ish
+    var root = 96 + ratio * 20;
+    bg.oscs.forEach(function(o, i){
+      o.osc.frequency.cancelScheduledValues(t);
+      o.osc.frequency.linearRampToValueAtTime(root * intervals[i], t + 2);
+    });
+    bg.lfo.frequency.cancelScheduledValues(t);
+    bg.lfo.frequency.linearRampToValueAtTime(ratio < 0.3 ? 0.22 : 0.08, t + 2);
+  }
+  function toggleSound(){
+    soundEnabled = !soundEnabled;
+    try { localStorage.setItem("hp_sound_muted", soundEnabled ? "0" : "1"); } catch(e){}
+    if (soundEnabled){ if (G.stacks) startBackgroundMusic(); sfx("click"); }
+    else stopBackgroundMusic();
+    updateSoundBtn();
+  }
+  function updateSoundBtn(){
+    var btn = el("soundBtn");
+    if (btn) btn.textContent = soundEnabled ? "🔊 Sound" : "🔇 Muted";
+  }
+
   /* ============ game state ============ */
   var G = {};
   function other(seat){ return seat === "P1" ? "P2" : "P1"; }
@@ -748,6 +914,7 @@
     closeOverlay("matchOverlay");
     closeOverlay("handOverlay");
     addLog("hand-mark", "New match — AI rating " + G.rating + ". You start fresh with " + START_STACK.P1 + " chips.");
+    startBackgroundMusic();
     startHand();
   }
 
@@ -780,6 +947,7 @@
     addLog("hand-mark", "Hand " + G.handNumber + " — " + label(sb) + " is button/SB (" + sbAmt + "), " + label(bb) + " is BB (" + bbAmt + ")");
     addLog(null, "Your hole cards: " + G.hole.P1.map(cardText).join(" "));
     addLog(null, "Opponent shows: " + cardText(G.exposedCard) + " (one card hidden)");
+    sfx("deal");
 
     render();
     setTimeout(driveActor, 500);
@@ -821,15 +989,18 @@
       G.folded = seat;
       G.stage = "resolve";
       addLog(null, label(seat) + " folds.");
+      sfx("fold");
       return;
     }
     if (action === "check"){
       G.acted[seat] = true;
       addLog(null, label(seat) + " checks.");
+      sfx("check");
     } else if (action === "call"){
       var pay = Math.min(toCall, G.stacks[seat]);
       G.stacks[seat] -= pay; G.streetContrib[seat] += pay; G.pot += pay; G.handContrib[seat] += pay; G.acted[seat] = true;
       addLog(null, label(seat) + " calls " + pay + (G.stacks[seat]===0 && pay>0 ? " (all-in)" : "") + ".");
+      sfx("call");
     } else if (action === "raise"){
       var maxRaise = maxRaiseFor(seat);
       var raiseAdd = Math.min(Math.max(amount,0), maxRaise);
@@ -838,6 +1009,7 @@
       G.currentBet = G.streetContrib[seat];
       G.acted[seat] = true; G.acted[other(seat)] = false;
       addLog(null, label(seat) + " raises to " + G.streetContrib[seat] + (G.stacks[seat]===0 ? " (all-in)" : "") + ".");
+      sfx("raise");
     }
     G.actor = other(seat);
   }
@@ -877,6 +1049,7 @@
     G.currentBet = 0;
     G.acted = { P1:false, P2:false };
     G.actor = G.bb;
+    sfx("flip");
     render();
     if (G.stacks.P1 === 0 && G.stacks.P2 === 0){
       setTimeout(finishBettingRound, 750);
@@ -904,6 +1077,7 @@
     G.p1Result = p1Result; G.p2Result = p2Result;
     addLog(null, "Showdown: you show " + G.hole.P1.map(cardText).join(" ") + ", opponent shows " + G.hole.P2.map(cardText).join(" ") + ".");
     addLog("result", (winner === "split" ? "Split pot of " + G.pot + "." : label(winner) + " wins pot of " + G.pot + "."));
+    sfx("flip");
     render();
     showHandOverlay();
   }
@@ -943,6 +1117,7 @@
 
   function render(){
     if (!G.stacks) return;
+    updateBackgroundMood();
     el("handTag").textContent = G.matchOver ? "Match complete" : ("Hand " + G.handNumber);
     el("ratingTag").textContent = "Rating " + G.rating;
     el("handCounter").textContent = "Hand " + G.handNumber;
@@ -1091,7 +1266,7 @@
       panel.classList.remove("open");
       handleHumanAction("raise", raiseAdd);
     };
-    el("cancelRaiseBtn").onclick = function(){ panel.classList.remove("open"); renderConsole(); };
+    el("cancelRaiseBtn").onclick = function(){ sfx("click"); panel.classList.remove("open"); renderConsole(); };
   }
 
   function renderLog(){
@@ -1112,12 +1287,15 @@
     if (G.winner === "P1"){
       stamp.textContent = "You Win"; stamp.classList.remove("lose");
       title.textContent = "You win " + G.pot + " chips";
+      sfx("win");
     } else if (G.winner === "P2"){
       stamp.textContent = "You Lose"; stamp.classList.add("lose");
       title.textContent = "Opponent wins " + G.pot + " chips";
+      sfx("lose");
     } else {
       stamp.textContent = "Split Pot"; stamp.classList.remove("lose");
       title.textContent = "Split pot — " + G.pot + " chips";
+      sfx("split");
     }
 
     if (G.wentToShowdown){
@@ -1160,20 +1338,24 @@
       summary.textContent = "AI rating climbs to " + (G.rating + RATING_STEP) + " for the next match. This match lasted " + G.handNumber + " hands.";
       footBtn.textContent = "Next Match →";
       footBtn.onclick = function(){ continueLadder(); };
+      sfx("matchWin");
     } else {
       stamp.textContent = "Run Over"; stamp.classList.add("lose");
       title.textContent = "You busted against rating " + G.rating;
       summary.textContent = "Peak AI rating reached: " + G.rating + ". This match lasted " + G.handNumber + " hands.";
       footBtn.textContent = "Restart Ladder";
       footBtn.onclick = function(){ newMatch(); };
+      sfx("matchLose");
     }
     openOverlay("matchOverlay");
   }
 
   /* ============ wiring ============ */
-  el("startBtn").onclick = function(){ closeOverlay("briefOverlay"); newMatch(); };
-  el("nextHandBtn").onclick = proceedAfterHand;
-  el("rulesBtn").onclick = function(){ el("rulesPanel").classList.toggle("open"); };
+  el("startBtn").onclick = function(){ sfx("click"); closeOverlay("briefOverlay"); newMatch(); };
+  el("nextHandBtn").onclick = function(){ sfx("click"); proceedAfterHand(); };
+  el("rulesBtn").onclick = function(){ sfx("click"); el("rulesPanel").classList.toggle("open"); };
+  el("soundBtn").onclick = toggleSound;
+  updateSoundBtn();
 
   /* mobile-only: hand history lives in a dismissible drawer instead of
      always taking up screen space (button is hidden above 760px) */
@@ -1181,7 +1363,7 @@
     el("logPanel").classList.toggle("open", open);
     el("logBackdrop").classList.toggle("open", open);
   }
-  el("historyBtn").onclick = function(){ setHistoryOpen(!el("logPanel").classList.contains("open")); };
+  el("historyBtn").onclick = function(){ sfx("click"); setHistoryOpen(!el("logPanel").classList.contains("open")); };
   el("logBackdrop").onclick = function(){ setHistoryOpen(false); };
 
   var resetArmed = false, resetTimer = null;
