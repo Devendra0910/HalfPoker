@@ -81,6 +81,10 @@
   .chip-btn:hover{ border-color:var(--gold); color:var(--gold); }
   .chip-btn:focus-visible, .action-btn:focus-visible, .preset-chip:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
   .chip-btn.armed{ border-color:var(--red); color:#fff; background:var(--red); }
+  #historyBtn{ display:none; }
+
+  .log-backdrop{ display:none; position:fixed; inset:0; background:rgba(3,6,4,.6); z-index:8; }
+  .log-backdrop.open{ display:block; }
 
   .rules-panel{
     display:none; background:var(--surface); border:1px solid var(--line); border-radius:10px;
@@ -103,7 +107,6 @@
 
   /* ---------- table layout ---------- */
   .layout{ display:grid; grid-template-columns:1fr 300px; gap:16px; align-items:start; }
-  @media (max-width:760px){ .layout{ grid-template-columns:1fr; } }
 
   .table{
     display:flex; flex-direction:column; gap:14px;
@@ -237,7 +240,6 @@
     background:var(--surface); border:1px solid var(--line); border-radius:10px;
     display:flex; flex-direction:column; height:520px; box-shadow:var(--shadow);
   }
-  @media (max-width:760px){ .log-panel{ height:280px; } }
   .log-head{
     padding:12px 16px; border-bottom:1px solid var(--line);
     font-size:.68rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--gold);
@@ -278,6 +280,69 @@
 
   .briefing p{ font-size:.9rem; line-height:1.65; color:var(--ink-dim); margin:0 0 10px; }
   .briefing b{ color:var(--gold); }
+
+  /* ---------- mobile: compact everything so the table fits one screen,
+     hand history becomes a toggleable drawer instead of a fixed panel ---------- */
+  @media (max-width:760px){
+    .layout{ grid-template-columns:1fr; gap:8px; }
+    .page{ padding:8px 8px 14px; }
+    .masthead{ padding-bottom:8px; margin-bottom:8px; gap:6px; }
+    .wordmark{ gap:6px; }
+    .wordmark h1{ font-size:1.2rem; }
+    .wordmark .tag{ font-size:.54rem; padding:3px 7px; }
+    .headbtns{ gap:5px; }
+    .chip-btn{ padding:5px 9px; font-size:.58rem; }
+    #historyBtn{ display:inline-flex; align-items:center; }
+    .streets{ margin-bottom:8px; padding:3px; }
+    .streets .step{ padding:5px 2px; font-size:.54rem; }
+
+    .table{ padding:8px; gap:6px; border-width:6px; border-radius:14px; }
+    .strip{ padding:7px 9px; }
+    .strip-head{ margin-bottom:4px; }
+    .strip-name{ font-size:.58rem; }
+    .strip-stack{ font-size:.86rem; }
+    .stack-display .chip-ico{ width:12px; height:12px; }
+    .strip-cards{ gap:5px; }
+    .made-hand{ margin-top:3px; font-size:.56rem; min-height:0; }
+
+    .card{ width:38px; height:53px; padding:3px 4px; border-radius:5px; }
+    .card-rank{ font-size:.64rem; }
+    .card-suit{ font-size:.8rem; }
+    .redacted-label{ font-size:1.05rem; }
+    .stamp{ font-size:.44rem; padding:1px 5px; top:-7px; }
+
+    .board{ padding:7px 9px; }
+    .pot-stack{ margin-bottom:0; }
+    .pot-stack .chip-ico{ width:12px; height:12px; margin:0 -4px; }
+    .pot-label{ font-size:.54rem; margin-top:2px; }
+    .pot-amount{ font-size:1.3rem; margin:1px 0 6px; }
+    .pot-split{ padding:4px 8px; margin-bottom:8px; gap:8px; }
+    .pot-split-side .chip-ico{ width:10px; height:10px; }
+    .pot-split-side .mono{ font-size:.68rem; }
+    .split-label{ font-size:.46rem; }
+    .pot-split-divider{ height:12px; }
+    .board-cards{ gap:4px; }
+
+    .console{ padding:7px 9px; gap:6px; min-height:0; }
+    .console-status{ font-size:.64rem; gap:6px; }
+    .console-status .odds{ font-size:.6rem; }
+    .console-buttons{ gap:6px; }
+    .action-btn{ padding:8px 10px; font-size:.62rem; }
+    .raise-panel{ gap:8px; padding-top:8px; }
+    .raise-row{ gap:6px; }
+    .preset-row{ gap:8px; }
+    .preset-chip .chip-face{ width:32px; height:32px; border-width:4px; font-size:.5rem; }
+    .preset-chip .plabel{ font-size:.48rem; }
+
+    /* hand history becomes a bottom-sheet drawer, opened via the History
+       button, instead of a permanently visible 280px+ panel */
+    .log-panel{
+      position:fixed; left:8px; right:8px; bottom:8px; z-index:9;
+      height:auto; max-height:55vh; display:none;
+      box-shadow:0 10px 30px rgba(0,0,0,.5);
+    }
+    .log-panel.open{ display:flex; }
+  }
 </style>
 
 <div class="page">
@@ -289,6 +354,7 @@
     </div>
     <div class="headbtns">
       <button class="chip-btn" id="rulesBtn" type="button">Rules</button>
+      <button class="chip-btn" id="historyBtn" type="button">History</button>
       <button class="chip-btn" id="resetBtn" type="button">Restart Ladder</button>
     </div>
   </header>
@@ -366,12 +432,13 @@
       </section>
     </div>
 
-    <aside class="log-panel">
+    <aside class="log-panel" id="logPanel">
       <div class="log-head"><span>Hand History</span><span id="handCounter">Hand 0</span></div>
       <div class="log-body" id="logBody"></div>
     </aside>
   </div>
 </div>
+<div class="log-backdrop" id="logBackdrop"></div>
 
 <div class="overlay" id="briefOverlay">
   <div class="overlay-card briefing">
@@ -1042,6 +1109,15 @@
   el("startBtn").onclick = function(){ closeOverlay("briefOverlay"); newMatch(); };
   el("nextHandBtn").onclick = proceedAfterHand;
   el("rulesBtn").onclick = function(){ el("rulesPanel").classList.toggle("open"); };
+
+  /* mobile-only: hand history lives in a dismissible drawer instead of
+     always taking up screen space (button is hidden above 760px) */
+  function setHistoryOpen(open){
+    el("logPanel").classList.toggle("open", open);
+    el("logBackdrop").classList.toggle("open", open);
+  }
+  el("historyBtn").onclick = function(){ setHistoryOpen(!el("logPanel").classList.contains("open")); };
+  el("logBackdrop").onclick = function(){ setHistoryOpen(false); };
 
   var resetArmed = false, resetTimer = null;
   el("resetBtn").onclick = function(){
