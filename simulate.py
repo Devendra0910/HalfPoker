@@ -11,8 +11,8 @@ import sys
 import time
 
 sys.path.insert(0, ".")
-from halfpoker.bot import HeuristicBot
-from halfpoker.game import play_hand, BIG_BLIND
+from powerpoker.bot import HeuristicBot
+from powerpoker.game import play_hand, BIG_BLIND
 
 P1_START = 500
 P2_START = 1000
