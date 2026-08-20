@@ -391,7 +391,7 @@
       <li><b>Score:</b> your chip stack at the end of Phase 1 plus your chip stack at the end of
       Phase 2. Higher total wins, exact tie is a draw. Dropping below the big blind ends that phase
       early and the next one starts right away.</li>
-      <li>You have <b>10 seconds</b> to act on your turn. Run out the clock and it auto-checks (if
+      <li>You have <b>20 seconds</b> to act on your turn. Run out the clock and it auto-checks (if
       nothing's owed) or auto-folds for you.</li>
     </ul>
   </div>
@@ -473,7 +473,7 @@
     through. <b>Phase 1:</b> you start with 500 chips, fully hidden &mdash; the AI holds 1000 chips
     with one card exposed. <b>Phase 2:</b> stacks and info both flip &mdash; you get 1000 chips but
     the AI can now see one of your cards and plays sharper, while it drops to 500 chips and goes
-    fully hidden. Blinds are 10/20, and you've got 10 seconds to act each turn. Your score is your
+    fully hidden. Blinds are 10/20, and you've got 20 seconds to act each turn. Your score is your
     chip total across both phases &mdash; whoever finishes with more wins.</p>
     <div class="overlay-foot">
       <button class="action-btn primary" id="startBtn" type="button">Start Session</button>
@@ -514,7 +514,7 @@
   var REVEAL_COUNT = { preflop:0, flop:3, turn:4, river:5 };
   var AI_TRIALS = 3000, AI_BLUFF = 0.04, AI_AGGRO = 0.20;
   var PHASE_MS = 5 * 60 * 1000;   // each of the two phases runs 5 minutes
-  var ACTION_TIME_MS = 10 * 1000; // 10 seconds to act on your turn
+  var ACTION_TIME_MS = 20 * 1000; // 20 seconds to act on your turn
   // Phase 1: you're the hidden/advantaged side on the short stack. Phase 2
   // swaps both the stacks and who holds the information edge, so each side
   // experiences one phase in each role — advantage seat is fully hidden and
