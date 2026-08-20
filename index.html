@@ -71,7 +71,8 @@
     font-size:.66rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--felt-1);
     padding:4px 10px; background:var(--gold); border-radius:20px;
   }
-  .wordmark .tag.rating-tag{ background:transparent; border:1px solid var(--gold); color:var(--gold); }
+  .wordmark .tag.phase-tag{ background:transparent; border:1px solid var(--gold); color:var(--gold); }
+  .wordmark .tag.phase-tag.urgent{ border-color:var(--red); color:#fff; background:var(--red); }
   .headbtns{ display:flex; gap:8px; }
   .chip-btn{
     background:var(--surface); border:1px solid var(--line); color:var(--ink-dim);
@@ -198,6 +199,12 @@
   }
   .console-status{ font-size:.85rem; color:var(--ink-dim); display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
   .console-status .odds{ font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--gold); }
+  .action-timer{ font-size:.72rem; font-weight:700; color:var(--gold); text-align:right; min-height:1em; }
+  .action-timer.urgent{ color:var(--red); }
+  .exposure-tag{
+    font-size:.6rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim);
+    border:1px solid var(--line); border-radius:20px; padding:2px 8px;
+  }
   .console-buttons{ display:flex; gap:9px; flex-wrap:wrap; }
   .action-btn{
     border:1px solid var(--line); background:linear-gradient(180deg, #1a3327, #0f2419); color:var(--ink);
@@ -328,6 +335,8 @@
     .console{ padding:7px 9px; gap:6px; min-height:0; }
     .console-status{ font-size:.64rem; gap:6px; }
     .console-status .odds{ font-size:.6rem; }
+    .action-timer{ font-size:.62rem; }
+    .exposure-tag{ font-size:.5rem; padding:1px 6px; }
     .console-buttons{ gap:6px; }
     .action-btn{ padding:8px 10px; font-size:.62rem; }
     .raise-panel{ gap:8px; padding-top:8px; }
@@ -359,28 +368,31 @@
     <div class="wordmark">
       <h1>PowerPoker</h1>
       <span class="tag" id="handTag">Not started</span>
-      <span class="tag rating-tag" id="ratingTag">Rating 1000</span>
+      <span class="tag phase-tag" id="phaseTag">Phase 1/2 · 5:00</span>
     </div>
     <div class="headbtns">
       <button class="chip-btn" id="soundBtn" type="button">🔊 Sound</button>
       <button class="chip-btn" id="rulesBtn" type="button">Rules</button>
       <button class="chip-btn" id="historyBtn" type="button">History</button>
-      <button class="chip-btn" id="resetBtn" type="button">Restart Ladder</button>
+      <button class="chip-btn" id="resetBtn" type="button">Restart</button>
     </div>
   </header>
 
   <div class="rules-panel" id="rulesPanel">
-    <b>The asymmetry:</b> You (Player 1) always start a match with 500 chips and two fully hidden
-    cards. The house AI (Player 2) holds two cards &mdash; but one of them is exposed face-up the
-    moment it's dealt. Five community cards are shared, revealed Hold'em-style (flop, turn, river).
-    Blinds are fixed at 10/20 and rotate every hand. Best five-card hand out of your two plus the
-    board wins the pot. Drop below the big blind and the match ends.
+    <b>The format:</b> One 10-minute session split into two 5-minute phases. Blinds are fixed at
+    10/20 and rotate every hand. Best five-card hand out of your two hole cards plus the shared
+    board wins the pot.
     <ul>
-      <li>You are more concealed than the AI &mdash; it leaks nothing back to you.</li>
-      <li><b>The ladder:</b> the AI's stack doubles as its rating, starting at 1000. Beat it and
-      the rating climbs by 100 for your next match &mdash; you always restart at 500, the AI never
-      gets easier.</li>
-      <li>Lose a match and the run ends. Your score is the peak rating you reached.</li>
+      <li><b>Phase 1 (5 min):</b> you start with 500 chips and stay fully hidden. The AI holds
+      1000 chips but plays with one card exposed, and its equity math never sees any of your cards.</li>
+      <li><b>Phase 2 (5 min):</b> everything swaps. You start with 1000 chips, but now one of your
+      cards is exposed &mdash; and the AI's decisions actually use it, so it plays sharper. The AI
+      drops to 500 chips and goes fully hidden.</li>
+      <li><b>Score:</b> your chip stack at the end of Phase 1 plus your chip stack at the end of
+      Phase 2. Higher total wins, exact tie is a draw. Dropping below the big blind ends that phase
+      early and the next one starts right away.</li>
+      <li>You have <b>10 seconds</b> to act on your turn. Run out the clock and it auto-checks (if
+      nothing's owed) or auto-folds for you.</li>
     </ul>
   </div>
 
@@ -393,6 +405,7 @@
           <div class="strip-who">
             <span class="dot" id="oppDot"></span>
             <span class="strip-name">Opponent &middot; House AI</span>
+            <span class="exposure-tag" id="oppExposureTag"></span>
           </div>
           <span class="stack-display"><span class="chip-ico"></span><span class="strip-stack mono" id="oppStack">1000</span></span>
         </div>
@@ -417,6 +430,7 @@
           <div class="strip-who">
             <span class="dot" id="youDot"></span>
             <span class="strip-name">You &middot; Player 1</span>
+            <span class="exposure-tag" id="youExposureTag"></span>
           </div>
           <span class="stack-display"><span class="chip-ico"></span><span class="strip-stack mono" id="youStack">500</span></span>
         </div>
@@ -426,6 +440,7 @@
 
       <section class="console">
         <div class="console-status mono" id="consoleStatus">Preparing table&hellip;</div>
+        <div class="action-timer mono" id="actionTimer"></div>
         <div class="console-buttons" id="consoleButtons"></div>
         <div class="raise-panel" id="raisePanel">
           <div class="raise-row">
@@ -452,15 +467,16 @@
 
 <div class="overlay" id="briefOverlay">
   <div class="overlay-card briefing">
-    <span class="overlay-stamp">Rating Ladder</span>
+    <span class="overlay-stamp">10-Minute Match</span>
     <h2>PowerPoker</h2>
-    <p>Two players, one shared board, one very unfair information split. <b>You</b> stay fully
-    hidden and always start a match with 500 chips. The <b>house AI</b> plays with one card
-    exposed the entire hand, and its stack is its rating &mdash; starting at 1000. Beat it and the
-    rating climbs 100 for your next match; you never carry chips forward, the AI never gets easier.
-    Blinds are 10 / 20. Lose a match and the run ends &mdash; your score is the peak rating you reached.</p>
+    <p>Two 5-minute phases, one shared board, and a hidden-card edge that swaps sides halfway
+    through. <b>Phase 1:</b> you start with 500 chips, fully hidden &mdash; the AI holds 1000 chips
+    with one card exposed. <b>Phase 2:</b> stacks and info both flip &mdash; you get 1000 chips but
+    the AI can now see one of your cards and plays sharper, while it drops to 500 chips and goes
+    fully hidden. Blinds are 10/20, and you've got 10 seconds to act each turn. Your score is your
+    chip total across both phases &mdash; whoever finishes with more wins.</p>
     <div class="overlay-foot">
-      <button class="action-btn primary" id="startBtn" type="button">Start Ladder</button>
+      <button class="action-btn primary" id="startBtn" type="button">Start Session</button>
     </div>
   </div>
 </div>
@@ -478,11 +494,11 @@
 
 <div class="overlay" id="matchOverlay">
   <div class="overlay-card">
-    <span class="overlay-stamp" id="matchStamp">Match Complete</span>
+    <span class="overlay-stamp" id="matchStamp">Phase Complete</span>
     <h2 id="matchTitle">&nbsp;</h2>
     <p class="mono" id="matchSummary" style="color:var(--ink-dim);font-size:.85rem;"></p>
     <div class="overlay-foot">
-      <button class="action-btn primary" id="newCaseBtn" type="button">New Match</button>
+      <button class="action-btn primary" id="newCaseBtn" type="button">Continue</button>
     </div>
   </div>
 </div>
@@ -493,12 +509,20 @@
 
   /* ============ constants ============ */
   var SMALL_BLIND = 10, BIG_BLIND = 20;
-  var START_STACK = { P1: 500, P2: 1000 };
   var STREETS = ["preflop","flop","turn","river"];
   var STREET_LABEL = { preflop:"Preflop", flop:"Flop", turn:"Turn", river:"River" };
   var REVEAL_COUNT = { preflop:0, flop:3, turn:4, river:5 };
   var AI_TRIALS = 3000, AI_BLUFF = 0.04, AI_AGGRO = 0.20;
-  var AI_RATING_START = 1000, RATING_STEP = 100;
+  var PHASE_MS = 5 * 60 * 1000;   // each of the two phases runs 5 minutes
+  var ACTION_TIME_MS = 10 * 1000; // 10 seconds to act on your turn
+  // Phase 1: you're the hidden/advantaged side on the short stack. Phase 2
+  // swaps both the stacks and who holds the information edge, so each side
+  // experiences one phase in each role — advantage seat is fully hidden and
+  // benefits from the other seat's exposed card.
+  var PHASES = [
+    { p1Stack:500, p2Stack:1000, advantage:"P1" },
+    { p1Stack:1000, p2Stack:500, advantage:"P2" }
+  ];
   var RANK_LABEL = {11:"J",12:"Q",13:"K",14:"A"};
   var SUIT_SYMBOL = {0:"♠",1:"♥",2:"♦",3:"♣"};
   var RED_SUITS = {1:true, 2:true};
@@ -811,7 +835,7 @@
         tone(440, 0, 0.12, { gain:0.14 });
         tone(440, 0.13, 0.16, { gain:0.13 });
         break;
-      case "matchWin": // whole ladder match won — bigger fanfare
+      case "matchWin": // whole 10-minute session won — bigger fanfare
         tone(523.25, 0, 0.15, { gain:0.17 });
         tone(659.25, 0.12, 0.15, { gain:0.17 });
         tone(783.99, 0.24, 0.15, { gain:0.18 });
@@ -830,8 +854,9 @@
 
   /* mood-adaptive background pad — three soft detuned tones whose pitch,
      brightness and shimmer speed drift based on how many chips you're
-     holding relative to your 500-chip start: low stack = darker/tenser,
-     big stack = brighter/warmer. Purely generative, so it needs no file. */
+     holding relative to the CURRENT phase's starting stack (500 or 1000,
+     whichever phase you're in): low ratio = darker/tenser, high ratio =
+     brighter/warmer. Purely generative, so it needs no file. */
   var bg = { running:false, lastStack:null };
   function startBackgroundMusic(){
     var ctx = ensureAudio();
@@ -864,7 +889,8 @@
     if (!bg.running || !G.stacks) return;
     if (bg.lastStack === G.stacks.P1) return;
     bg.lastStack = G.stacks.P1;
-    var ratio = Math.max(0, Math.min(G.stacks.P1 / START_STACK.P1, 2));
+    var baseline = (PHASES[G.phaseIndex] || PHASES[0]).p1Stack;
+    var ratio = Math.max(0, Math.min(G.stacks.P1 / baseline, 2));
     var t = bg.ctx.currentTime;
     var filterFreq = 480 + ratio * 720;
     bg.filter.frequency.cancelScheduledValues(t);
@@ -890,39 +916,161 @@
     if (btn) btn.textContent = soundEnabled ? "🔊 Sound" : "🔇 Muted";
   }
 
+  /* ============ clocks ============ */
+  /* Phase clock (5 min): purely a display + a check made once per hand
+     boundary (in proceedAfterHand) — it never interrupts a hand mid-betting,
+     it just stops a new one from being dealt once time's up or the phase's
+     starting stacks are exhausted. */
+  var phaseClockInterval = null;
+  function startPhaseClock(){
+    stopPhaseClock();
+    updatePhaseClockDisplay();
+    phaseClockInterval = setInterval(updatePhaseClockDisplay, 250);
+  }
+  function stopPhaseClock(){
+    if (phaseClockInterval){ clearInterval(phaseClockInterval); phaseClockInterval = null; }
+  }
+  function updatePhaseClockDisplay(){
+    var tag = el("phaseTag");
+    if (!tag || !G.phaseEndAt) return;
+    var remain = Math.max(0, G.phaseEndAt - Date.now());
+    var mm = Math.floor(remain / 60000);
+    var ss = Math.floor((remain % 60000) / 1000);
+    tag.textContent = "Phase " + (G.phaseIndex + 1) + "/2 · " + mm + ":" + (ss < 10 ? "0" : "") + ss;
+    tag.classList.toggle("urgent", remain > 0 && remain <= 30000);
+  }
+
+  /* Action clock (10s): starts the moment it becomes your turn, keeps
+     running even if you open the raise panel (it's one continuous decision
+     window, not a fresh timer), and auto-checks/folds you out if it hits 0. */
+  var actionTimerInterval = null, actionDeadline = null;
+  function startActionTimer(){
+    stopActionTimer();
+    actionDeadline = Date.now() + ACTION_TIME_MS;
+    updateActionTimerDisplay();
+    actionTimerInterval = setInterval(function(){
+      if (actionDeadline - Date.now() <= 0){
+        stopActionTimer();
+        autoTimeoutAction();
+      } else {
+        updateActionTimerDisplay();
+      }
+    }, 150);
+  }
+  function stopActionTimer(){
+    if (actionTimerInterval){ clearInterval(actionTimerInterval); actionTimerInterval = null; }
+    actionDeadline = null;
+    var t = el("actionTimer");
+    if (t){ t.textContent = ""; t.classList.remove("urgent"); }
+  }
+  function updateActionTimerDisplay(){
+    var t = el("actionTimer");
+    if (!t || !actionDeadline) return;
+    var remain = Math.max(0, Math.ceil((actionDeadline - Date.now()) / 1000));
+    t.textContent = remain + "s to act";
+    t.classList.toggle("urgent", remain <= 3);
+  }
+  function autoTimeoutAction(){
+    if (G.stage !== "betting" || G.actor !== "P1") return;
+    el("raisePanel").classList.remove("open");
+    var toCall = Math.min(toCallFor("P1"), G.stacks.P1);
+    addLog(null, "You timed out — auto-" + (toCall > 0 ? "folded" : "checked") + ".");
+    handleHumanAction(toCall > 0 ? "fold" : "check", 0);
+  }
+
   /* ============ game state ============ */
   var G = {};
   function other(seat){ return seat === "P1" ? "P2" : "P1"; }
   function label(seat){ return seat === "P1" ? "You" : "Opponent"; }
 
-  function newMatch(){
-    G.rating = AI_RATING_START;
+  function startSession(){
+    stopActionTimer();
+    stopPhaseClock();
     G.log = [];
-    startMatchAtRating();
+    G.phase1End = null;
+    G.phase2End = null;
+    G.sessionOver = false;
+    startBackgroundMusic();
+    startPhase(0);
   }
 
-  function continueLadder(){
-    G.rating += RATING_STEP;
-    startMatchAtRating();
-  }
-
-  function startMatchAtRating(){
-    G.stacks = { P1: START_STACK.P1, P2: G.rating };
+  function startPhase(idx){
+    var cfg = PHASES[idx];
+    G.phaseIndex = idx;
+    G.advantageSeat = cfg.advantage;
+    G.exposedSeat = other(cfg.advantage);
+    G.stacks = { P1: cfg.p1Stack, P2: cfg.p2Stack };
     G.button = "P1";
     G.handNumber = 0;
-    G.matchOver = false;
+    G.phaseEndAt = Date.now() + PHASE_MS;
     closeOverlay("matchOverlay");
     closeOverlay("handOverlay");
-    addLog("hand-mark", "New match — AI rating " + G.rating + ". You start fresh with " + START_STACK.P1 + " chips.");
-    startBackgroundMusic();
+    addLog("hand-mark", "Phase " + (idx + 1) + " begins — you start with " + cfg.p1Stack + " chips, " +
+      (G.exposedSeat === "P2" ? "fully hidden. The AI holds " + cfg.p2Stack + " with one card exposed." :
+        "with one card exposed to the AI. The AI holds " + cfg.p2Stack + ", fully hidden."));
+    startPhaseClock();
     startHand();
+  }
+
+  function endPhase(){
+    stopPhaseClock();
+    var snapshot = { P1: G.stacks.P1, P2: G.stacks.P2 };
+    if (G.phaseIndex === 0){
+      G.phase1End = snapshot;
+      showPhaseOverlay();
+    } else {
+      G.phase2End = snapshot;
+      finishSession();
+    }
+    render();
+  }
+
+  function showPhaseOverlay(){
+    var stamp = el("matchStamp"), title = el("matchTitle"), summary = el("matchSummary"), footBtn = el("newCaseBtn");
+    stamp.textContent = "Phase 1 Complete"; stamp.classList.remove("lose");
+    title.textContent = "You: " + G.phase1End.P1 + " chips · Opponent: " + G.phase1End.P2 + " chips";
+    var next = PHASES[1];
+    summary.textContent = "Stacks and the info edge swap now — Phase 2 you start with " + next.p1Stack + " chips " +
+      (next.advantage === "P1" ? "and stay fully hidden." : "but one of your cards will be exposed to the AI.") +
+      " Final score is Phase 1 + Phase 2 chips combined.";
+    footBtn.textContent = "Start Phase 2 →";
+    footBtn.onclick = function(){ sfx("click"); startPhase(1); };
+    sfx("split");
+    openOverlay("matchOverlay");
+  }
+
+  function finishSession(){
+    G.sessionOver = true;
+    var totalP1 = G.phase1End.P1 + G.phase2End.P1;
+    var totalP2 = G.phase1End.P2 + G.phase2End.P2;
+    G.totalP1 = totalP1; G.totalP2 = totalP2;
+    var stamp = el("matchStamp"), title = el("matchTitle"), summary = el("matchSummary"), footBtn = el("newCaseBtn");
+    summary.textContent = "Phase 1 — you " + G.phase1End.P1 + ", AI " + G.phase1End.P2 + ".  " +
+      "Phase 2 — you " + G.phase2End.P1 + ", AI " + G.phase2End.P2 + ".  " +
+      "Total — you " + totalP1 + ", AI " + totalP2 + ".";
+    if (totalP1 > totalP2){
+      stamp.textContent = "You Win"; stamp.classList.remove("lose");
+      title.textContent = "You win the session, " + totalP1 + " to " + totalP2;
+      sfx("matchWin");
+    } else if (totalP2 > totalP1){
+      stamp.textContent = "You Lose"; stamp.classList.add("lose");
+      title.textContent = "The AI wins the session, " + totalP2 + " to " + totalP1;
+      sfx("matchLose");
+    } else {
+      stamp.textContent = "Tie"; stamp.classList.remove("lose");
+      title.textContent = "Dead even at " + totalP1 + " chips each";
+      sfx("split");
+    }
+    footBtn.textContent = "Play Again";
+    footBtn.onclick = function(){ sfx("click"); startSession(); };
+    openOverlay("matchOverlay");
   }
 
   function startHand(){
     G.handNumber += 1;
     var deck = shuffle(makeDeck());
     G.hole = { P1:[deck.pop(), deck.pop()], P2:[deck.pop(), deck.pop()] };
-    G.exposedCard = G.hole.P2[1];
+    G.exposedCard = G.hole[G.exposedSeat][1];
     G.community = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
     G.streetIndex = 0;
     G.street = STREETS[0];
@@ -946,7 +1094,8 @@
 
     addLog("hand-mark", "Hand " + G.handNumber + " — " + label(sb) + " is button/SB (" + sbAmt + "), " + label(bb) + " is BB (" + bbAmt + ")");
     addLog(null, "Your hole cards: " + G.hole.P1.map(cardText).join(" "));
-    addLog(null, "Opponent shows: " + cardText(G.exposedCard) + " (one card hidden)");
+    if (G.exposedSeat === "P2") addLog(null, "Opponent shows: " + cardText(G.exposedCard) + " (one card hidden)");
+    else addLog(null, "You're exposed this phase — the AI can see your " + cardText(G.exposedCard) + ".");
     sfx("deal");
 
     render();
@@ -980,7 +1129,8 @@
       return;
     }
     render();
-    if (G.actor === "P2") setTimeout(runAITurn, 550 + Math.random()*450);
+    if (G.actor === "P2"){ stopActionTimer(); setTimeout(runAITurn, 550 + Math.random()*450); }
+    else startActionTimer();
   }
 
   function applyAction(seat, action, amount){
@@ -1018,10 +1168,15 @@
     var toCall = Math.min(toCallFor("P2"), G.stacks.P2);
     var maxRaise = maxRaiseFor("P2");
     var communityVisible = G.community.slice(0, REVEAL_COUNT[G.street]);
-    var known = G.hole.P2.concat(communityVisible);
+    // In Phase 2 the AI holds the real info advantage: it actually gets your
+    // exposed card fed into its equity math (not just shown on screen), so
+    // it plays measurably sharper against you — same estimateEquity/knownOpp
+    // machinery that already exists, just handed a real card instead of [].
+    var knownOpp = G.exposedSeat === "P1" ? [G.hole.P1[1]] : [];
+    var known = G.hole.P2.concat(communityVisible).concat(knownOpp);
     var pool = deckRemaining(known);
     var decision = botAct({
-      hole: G.hole.P2, community: communityVisible, knownOpp: [],
+      hole: G.hole.P2, community: communityVisible, knownOpp: knownOpp,
       pool: pool, pot: G.pot, toCall: toCall, maxRaise: maxRaise, trials: AI_TRIALS
     });
     applyAction("P2", decision.action, decision.amount);
@@ -1037,6 +1192,7 @@
 
   function handleHumanAction(action, amount){
     if (G.stage !== "betting" || G.actor !== "P1") return;
+    stopActionTimer();
     applyAction("P1", action, amount);
     afterAction();
   }
@@ -1118,8 +1274,10 @@
   function render(){
     if (!G.stacks) return;
     updateBackgroundMood();
-    el("handTag").textContent = G.matchOver ? "Match complete" : ("Hand " + G.handNumber);
-    el("ratingTag").textContent = "Rating " + G.rating;
+    updatePhaseClockDisplay();
+    el("handTag").textContent = G.sessionOver ? "Session complete" : ("Hand " + G.handNumber);
+    el("youExposureTag").textContent = G.exposedSeat === "P1" ? "Exposed to AI" : "Hidden";
+    el("oppExposureTag").textContent = G.exposedSeat === "P2" ? "Exposed to you" : "Hidden";
     el("handCounter").textContent = "Hand " + G.handNumber;
     el("youStack").textContent = G.stacks.P1;
     el("oppStack").textContent = G.stacks.P2;
@@ -1142,8 +1300,13 @@
     var revealCount = REVEAL_COUNT[G.street] || 0;
     var visibleCommunity = (G.community || []).slice(0, revealCount);
 
-    /* your cards + your made hand, using everything you can see */
-    el("youCards").innerHTML = (G.hole.P1 || []).map(function(c){ return cardHTML(c); }).join("");
+    /* your cards + your made hand, using everything you can see. When you're
+       the exposed seat this phase, your 2nd card gets an "Exposed" stamp —
+       purely a reminder that the AI's math actually sees it, since you can
+       already see your own hand regardless. */
+    el("youCards").innerHTML = (G.hole.P1 || []).map(function(c, idx){
+      return (G.exposedSeat === "P1" && idx === 1) ? exposedWrapHTML(c) : cardHTML(c);
+    }).join("");
     if (G.hole.P1){
       var youSeen = G.hole.P1.concat(visibleCommunity);
       el("youMadeHand").innerHTML = youSeen.length >= 5
@@ -1151,26 +1314,34 @@
         : '<span class="fyi">Hand forms after the flop</span>';
     }
 
-    /* opponent cards: card0 hidden until showdown, card1 exposed always */
+    /* opponent cards: whichever seat is exposed this phase shows one card
+       face-up; the advantaged seat stays fully redacted until showdown. */
     var oppHtml = "";
     if (G.hole.P2){
-      oppHtml += (G.wentToShowdown ? cardHTML(G.hole.P2[0], "reveal-in") : redactedHTML());
-      oppHtml += exposedWrapHTML(G.hole.P2[1]);
+      if (G.wentToShowdown){
+        oppHtml += cardHTML(G.hole.P2[0], "reveal-in") + cardHTML(G.hole.P2[1], "reveal-in");
+      } else if (G.exposedSeat === "P2"){
+        oppHtml += redactedHTML() + exposedWrapHTML(G.hole.P2[1]);
+      } else {
+        oppHtml += redactedHTML() + redactedHTML();
+      }
     }
     el("oppCards").innerHTML = oppHtml;
 
-    /* opponent's made hand, from ONLY what you can actually see: their one
-       exposed card plus the board. Their real hand (with the hidden card)
-       can only be this good or better — shown as a floor, not the truth,
-       until showdown reveals the real thing. */
+    /* opponent's made hand. When the opponent is this phase's exposed seat,
+       show the floor hand from ONLY their one visible card + the board —
+       their real hand can only be this good or better. When they're fully
+       hidden (Phase 2), you get nothing back at all. */
     if (G.hole.P2){
       if (G.wentToShowdown && G.p2Best){
         el("oppMadeHand").textContent = describeHand(G.p2Best);
-      } else {
+      } else if (G.exposedSeat === "P2"){
         var oppSeen = [G.exposedCard].concat(visibleCommunity);
         el("oppMadeHand").innerHTML = oppSeen.length >= 5
           ? 'At least: ' + describeHand(evaluateBest(oppSeen))
           : '<span class="fyi">Only one card revealed so far</span>';
+      } else {
+        el("oppMadeHand").innerHTML = '<span class="fyi">Fully hidden this phase</span>';
       }
     }
 
@@ -1193,7 +1364,7 @@
     btnsEl.innerHTML = "";
     raisePanel.classList.remove("open");
 
-    if (G.matchOver){ statusEl.textContent = "The match is complete."; return; }
+    if (G.sessionOver){ statusEl.textContent = "The session is complete."; return; }
     if (G.stage === "resolve"){ statusEl.textContent = "Hand resolved — see the note above."; return; }
     if (G.actor !== "P1"){
       statusEl.textContent = "Opponent is deciding…";
@@ -1319,39 +1490,18 @@
 
   function proceedAfterHand(){
     closeOverlay("handOverlay");
-    if (G.stacks.P1 < BIG_BLIND || G.stacks.P2 < BIG_BLIND){
-      G.matchOver = true;
-      G.matchWon = G.stacks.P2 < BIG_BLIND;
-      showMatchOverlay();
-      render();
+    var busted = G.stacks.P1 < BIG_BLIND || G.stacks.P2 < BIG_BLIND;
+    var timeUp = Date.now() >= G.phaseEndAt;
+    if (busted || timeUp){
+      endPhase();
       return;
     }
     G.button = other(G.button);
     startHand();
   }
 
-  function showMatchOverlay(){
-    var stamp = el("matchStamp"), title = el("matchTitle"), summary = el("matchSummary"), footBtn = el("newCaseBtn");
-    if (G.matchWon){
-      stamp.textContent = "Match Won"; stamp.classList.remove("lose");
-      title.textContent = "You beat the rating-" + G.rating + " AI";
-      summary.textContent = "AI rating climbs to " + (G.rating + RATING_STEP) + " for the next match. This match lasted " + G.handNumber + " hands.";
-      footBtn.textContent = "Next Match →";
-      footBtn.onclick = function(){ continueLadder(); };
-      sfx("matchWin");
-    } else {
-      stamp.textContent = "Run Over"; stamp.classList.add("lose");
-      title.textContent = "You busted against rating " + G.rating;
-      summary.textContent = "Peak AI rating reached: " + G.rating + ". This match lasted " + G.handNumber + " hands.";
-      footBtn.textContent = "Restart Ladder";
-      footBtn.onclick = function(){ newMatch(); };
-      sfx("matchLose");
-    }
-    openOverlay("matchOverlay");
-  }
-
   /* ============ wiring ============ */
-  el("startBtn").onclick = function(){ sfx("click"); closeOverlay("briefOverlay"); newMatch(); };
+  el("startBtn").onclick = function(){ sfx("click"); closeOverlay("briefOverlay"); startSession(); };
   el("nextHandBtn").onclick = function(){ sfx("click"); proceedAfterHand(); };
   el("rulesBtn").onclick = function(){ sfx("click"); el("rulesPanel").classList.toggle("open"); };
   el("soundBtn").onclick = toggleSound;
@@ -1374,18 +1524,18 @@
       el("resetBtn").classList.add("armed");
       resetTimer = setTimeout(function(){
         resetArmed = false;
-        el("resetBtn").textContent = "Restart Ladder";
+        el("resetBtn").textContent = "Restart";
         el("resetBtn").classList.remove("armed");
       }, 2800);
       return;
     }
     clearTimeout(resetTimer);
     resetArmed = false;
-    el("resetBtn").textContent = "New Match";
+    el("resetBtn").textContent = "New Session";
     el("resetBtn").classList.remove("armed");
     closeOverlay("handOverlay");
     closeOverlay("matchOverlay");
-    newMatch();
+    startSession();
   };
 
   /* expose a tiny self-test hook for verification (both seats AI-driven) */
@@ -1393,7 +1543,6 @@
     n = n || 200;
     var wins = { P1:0, P2:0, split:0 };
     for (var i=0;i<n;i++){
-      var stacks = { P1: START_STACK.P1, P2: START_STACK.P2 };
       var button = i % 2 === 0 ? "P1" : "P2";
       var deck = shuffle(makeDeck());
       var hole = { P1:[deck.pop(),deck.pop()], P2:[deck.pop(),deck.pop()] };
